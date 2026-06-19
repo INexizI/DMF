@@ -20,6 +20,7 @@ namespace DMF
     private Button btnInput = null!;
     private TextBox outputFile = null!;
     private Button btnOutput = null!;
+    private ComboBox cmbFormat = null!;
     private ComboBox cmbTrimMode = null!;
     private TextBox startTime = null!;
     private TextBox durationTime = null!;
@@ -163,7 +164,7 @@ namespace DMF
       {
         Dock = DockStyle.Fill,
         ColumnCount = 3,
-        RowCount = 9,
+        RowCount = 10,
         Padding = new Padding(10),
         AutoSize = false
       };
@@ -189,8 +190,20 @@ namespace DMF
       btnOutput = new Button { Text = "Browse...", Dock = DockStyle.Fill };
       table.Controls.Add(btnOutput, 2, 1);
 
-      // Row 2: Trim mode
-      table.Controls.Add(new Label { Text = "Trim mode:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 2);
+      // Row 2: Format
+      table.Controls.Add(new Label { Text = "Format:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 2);
+      cmbFormat = new ComboBox
+      {
+        Dock = DockStyle.Fill,
+        DropDownStyle = ComboBoxStyle.DropDownList,
+        Items = { "mp4", "avi", "mkv", "mov", "webm", "flv", "wmv", "m4v", "ts" },
+        SelectedIndex = 0
+      };
+      table.Controls.Add(cmbFormat, 1, 2);
+      table.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 2);
+
+      // Row 3: Trim mode
+      table.Controls.Add(new Label { Text = "Trim mode:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 3);
       cmbTrimMode = new ComboBox
       {
         Dock = DockStyle.Fill,
@@ -198,53 +211,83 @@ namespace DMF
         Items = { "Source", "Duration", "End time" },
         SelectedIndex = 0
       };
-      table.Controls.Add(cmbTrimMode, 1, 2);
-      table.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 2);
+      table.Controls.Add(cmbTrimMode, 1, 3);
+      table.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 3);
 
-      // Row 3: Start time
-      table.Controls.Add(new Label { Text = "Start time:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 3);
+      // Row 4: Start time
+      table.Controls.Add(new Label { Text = "Start time:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 4);
       startTime = new TextBox { Dock = DockStyle.Fill, Text = "00:00:00" };
-      table.Controls.Add(startTime, 1, 3);
-      table.Controls.Add(new Label { Text = "(HH:MM:SS)", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill }, 2, 3);
-
-      // Row 4: Duration
-      table.Controls.Add(new Label { Text = "Duration:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 4);
-      durationTime = new TextBox { Dock = DockStyle.Fill, Text = "00:00:10" };
-      table.Controls.Add(durationTime, 1, 4);
+      table.Controls.Add(startTime, 1, 4);
       table.Controls.Add(new Label { Text = "(HH:MM:SS)", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill }, 2, 4);
 
-      // Row 5: End time
-      table.Controls.Add(new Label { Text = "End time:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 5);
-      endTime = new TextBox { Dock = DockStyle.Fill, Text = "00:00:30" };
-      table.Controls.Add(endTime, 1, 5);
+      // Row 5: Duration
+      table.Controls.Add(new Label { Text = "Duration:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 5);
+      durationTime = new TextBox { Dock = DockStyle.Fill, Text = "00:00:10" };
+      table.Controls.Add(durationTime, 1, 5);
       table.Controls.Add(new Label { Text = "(HH:MM:SS)", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill }, 2, 5);
 
-      // Row 6: Audio codec
-      table.Controls.Add(new Label { Text = "Audio codec:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 6);
+      // Row 6: End time
+      table.Controls.Add(new Label { Text = "End time:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 6);
+      endTime = new TextBox { Dock = DockStyle.Fill, Text = "00:00:30" };
+      table.Controls.Add(endTime, 1, 6);
+      table.Controls.Add(new Label { Text = "(HH:MM:SS)", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill }, 2, 6);
+
+      // Row 7: Audio codec
+      table.Controls.Add(new Label { Text = "Audio codec:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 7);
       cmbAudioCodec = new ComboBox
       {
         Dock = DockStyle.Fill,
         DropDownStyle = ComboBoxStyle.DropDownList,
-        Items = { "copy", "aac", "mp3", "libmp3lame", "ac3", "flac" },
+        Items =
+        {
+            "copy",
+            "aac",
+            "libfdk_aac",      // Fraunhofer FDK AAC (if compiled in)
+            "mp3",
+            "libmp3lame",
+            "ac3",
+            "flac",
+            "opus",            // libopus
+            "libvorbis",
+            "pcm_s16le",       // uncompressed PCM
+            "wav"              // WAV (actually pcm_s16le wrapped)
+        },
         SelectedIndex = 0
       };
-      table.Controls.Add(cmbAudioCodec, 1, 6);
-      table.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 6);
+      table.Controls.Add(cmbAudioCodec, 1, 7);
+      table.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 7);
 
-      // Row 7: Video codec
-      table.Controls.Add(new Label { Text = "Video codec:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 7);
+      // Row 8: Video codec
+      table.Controls.Add(new Label { Text = "Video codec:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 8);
       cmbVideoCodec = new ComboBox
       {
         Dock = DockStyle.Fill,
         DropDownStyle = ComboBoxStyle.DropDownList,
-        Items = { "copy", "libx264", "libx265", "libvpx-vp9", "mpeg4" },
+        Items = {
+          "copy",
+          "libx264",         // software H.264
+          "libx265",         // software H.265/HEVC
+          "libvpx-vp9",      // VP9
+          "libvpx",          // VP8
+          "mpeg4",           // MPEG-4 part 2
+          "libxvid",         // Xvid (MPEG-4)
+          "mpeg2video",      // MPEG-2
+          "wmv2",            // Windows Media Video 2
+          "h264_nvenc",      // NVIDIA H.264
+          "hevc_nvenc",      // NVIDIA HEVC
+          "h264_amf",        // AMD H.264
+          "hevc_amf",        // AMD HEVC
+          "h264_qsv",        // Intel QuickSync H.264
+          "hevc_qsv",        // Intel QuickSync HEVC
+          "libaom-av1"       // AV1 (software, slow)
+        },
         SelectedIndex = 0
       };
-      table.Controls.Add(cmbVideoCodec, 1, 7);
-      table.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 7);
+      table.Controls.Add(cmbVideoCodec, 1, 8);
+      table.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 8);
 
-      // Row 8: Checkbox
-      table.Controls.Add(new Label { Dock = DockStyle.Fill }, 0, 8);
+      // Row 9: Checkbox
+      table.Controls.Add(new Label { Dock = DockStyle.Fill }, 0, 9);
       chkOpenOnSuccess = new CheckBox
       {
         Text = "Open folder on success",
@@ -253,8 +296,8 @@ namespace DMF
         Anchor = AnchorStyles.Left,
         Checked = true
       };
-      table.Controls.Add(chkOpenOnSuccess, 1, 8);
-      table.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 8);
+      table.Controls.Add(chkOpenOnSuccess, 1, 9);
+      table.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 9);
 
       var bottomPanel = new Panel
       {
@@ -317,6 +360,7 @@ namespace DMF
       btnInput.Click += BtnInput_Click;
       btnOutput.Click += BtnOutput_Click;
       btnProcess.Click += BtnProcess_Click;
+      cmbFormat.SelectedIndexChanged += CmbFormat_SelectedIndexChanged;
       cmbTrimMode.SelectedIndexChanged += CmbTrimMode_SelectedIndexChanged;
 
       UpdateTime();
@@ -341,9 +385,9 @@ namespace DMF
       foreach (Control ctrl in timeTable.Controls)
       {
         int row = timeTable.GetRow(ctrl);
-        if (row == 4)
+        if (row == 5)
           ctrl.Visible = showDuration;
-        else if (row == 5)
+        else if (row == 6)
           ctrl.Visible = showEnd;
       }
     }
@@ -361,9 +405,27 @@ namespace DMF
     {
       using var file = new SaveFileDialog();
       file.Title = "Select output file";
-      file.Filter = "MP4 files|*.mp4|AVI files|*.avi|MKV files|*.mkv|All files|*.*";
+
+      string format = cmbFormat.SelectedItem?.ToString() ?? "mp4";
+      file.Filter = $"{format.ToUpper()} files|*.{format}|All files|*.*";
+      file.DefaultExt = format;
+
       if (file.ShowDialog() == DialogResult.OK)
         outputFile.Text = file.FileName;
+    }
+
+    private void CmbFormat_SelectedIndexChanged(object? sender, EventArgs e)
+    {
+      if (string.IsNullOrWhiteSpace(outputFile.Text))
+        return;
+
+      string current = outputFile.Text;
+      string? dir = Path.GetDirectoryName(current);
+      string fileName = Path.GetFileNameWithoutExtension(current);
+      string newExt = cmbFormat.SelectedItem?.ToString() ?? "mp4";
+      string newPath = Path.Combine(dir ?? "", fileName + "." + newExt);
+      if (!string.Equals(current, newPath, StringComparison.OrdinalIgnoreCase))
+        outputFile.Text = newPath;
     }
 
     private async void BtnProcess_Click(object? sender, EventArgs e)
