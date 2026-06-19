@@ -30,6 +30,7 @@ namespace DMF
     private Label status = null!;
     private ProgressBar progressBar = null!;
     private TableLayoutPanel timeTable = null!;
+    private CheckBox chkOpenOnSuccess = null!;
 
     [Serializable]
     public class Settings
@@ -40,6 +41,7 @@ namespace DMF
       public int WinY { get; set; } = -1;
       public bool WinMax { get; set; } = false;
       public bool Resizing { get; set; } = false;
+      public bool OpenOnSuccess { get; set; } = true;
     }
 
     public DMForm()
@@ -47,6 +49,8 @@ namespace DMF
       LoadSettings();
       InitializeForm();
       InitializeLayout();
+      chkOpenOnSuccess.Checked = settings.OpenOnSuccess;
+      UpdateProcessButton();
     }
 
     private void LoadSettings()
@@ -107,6 +111,7 @@ namespace DMF
           settings.WinY = Location.Y;
         }
         settings.WinMax = WindowState == FormWindowState.Maximized;
+        settings.OpenOnSuccess = chkOpenOnSuccess.Checked;
 
         var settingsToSave = new Settings
         {
@@ -115,7 +120,8 @@ namespace DMF
           WinX = settings.WinX,
           WinY = settings.WinY,
           WinMax = settings.WinMax,
-          Resizing = settings.Resizing
+          Resizing = settings.Resizing,
+          OpenOnSuccess = settings.OpenOnSuccess
         };
 
         string json = JsonSerializer.Serialize(settingsToSave, new JsonSerializerOptions { WriteIndented = true });
@@ -147,7 +153,7 @@ namespace DMF
       {
         Text = "FFmpeg Processing",
         Dock = DockStyle.Top,
-        Height = 400,
+        Height = 300,
         Padding = new Padding(10),
         ForeColor = Color.White
       };
@@ -157,55 +163,64 @@ namespace DMF
       {
         Dock = DockStyle.Fill,
         ColumnCount = 3,
-        RowCount = 8,
+        RowCount = 9,
         Padding = new Padding(10),
-        AutoSize = true
+        AutoSize = false
       };
-      table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));
+      table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
       table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
       table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));
       groupFFmpeg.Controls.Add(table);
       timeTable = table;
 
-      table.Controls.Add(new Label { Text = "Input:", TextAlign = ContentAlignment.MiddleRight }, 0, 0);
+      // Row 0: Input
+      table.Controls.Add(new Label { Text = "Input:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 0);
       inputFile = new TextBox { Dock = DockStyle.Fill };
+      inputFile.TextChanged += (s, e) => UpdateProcessButton();
       table.Controls.Add(inputFile, 1, 0);
       btnInput = new Button { Text = "Browse...", Dock = DockStyle.Fill };
       table.Controls.Add(btnInput, 2, 0);
 
-      table.Controls.Add(new Label { Text = "Output:", TextAlign = ContentAlignment.MiddleRight }, 0, 1);
+      // Row 1: Output
+      table.Controls.Add(new Label { Text = "Output:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 1);
       outputFile = new TextBox { Dock = DockStyle.Fill };
+      outputFile.TextChanged += (s, e) => UpdateProcessButton();
       table.Controls.Add(outputFile, 1, 1);
       btnOutput = new Button { Text = "Browse...", Dock = DockStyle.Fill };
       table.Controls.Add(btnOutput, 2, 1);
 
-      table.Controls.Add(new Label { Text = "Trim mode:", TextAlign = ContentAlignment.MiddleRight }, 0, 2);
+      // Row 2: Trim mode
+      table.Controls.Add(new Label { Text = "Trim mode:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 2);
       cmbTrimMode = new ComboBox
       {
         Dock = DockStyle.Fill,
         DropDownStyle = ComboBoxStyle.DropDownList,
         Items = { "Source", "Duration", "End time" },
-        SelectedIndex = 1
+        SelectedIndex = 0
       };
       table.Controls.Add(cmbTrimMode, 1, 2);
-      table.Controls.Add(new Label(), 2, 2);
+      table.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 2);
 
-      table.Controls.Add(new Label { Text = "Start time:", TextAlign = ContentAlignment.MiddleRight }, 0, 3);
+      // Row 3: Start time
+      table.Controls.Add(new Label { Text = "Start time:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 3);
       startTime = new TextBox { Dock = DockStyle.Fill, Text = "00:00:00" };
       table.Controls.Add(startTime, 1, 3);
-      table.Controls.Add(new Label { Text = "(HH:MM:SS)", TextAlign = ContentAlignment.MiddleLeft }, 2, 3);
+      table.Controls.Add(new Label { Text = "(HH:MM:SS)", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill }, 2, 3);
 
-      table.Controls.Add(new Label { Text = "Duration:", TextAlign = ContentAlignment.MiddleRight }, 0, 4);
+      // Row 4: Duration
+      table.Controls.Add(new Label { Text = "Duration:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 4);
       durationTime = new TextBox { Dock = DockStyle.Fill, Text = "00:00:10" };
       table.Controls.Add(durationTime, 1, 4);
-      table.Controls.Add(new Label { Text = "(HH:MM:SS)", TextAlign = ContentAlignment.MiddleLeft }, 2, 4);
+      table.Controls.Add(new Label { Text = "(HH:MM:SS)", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill }, 2, 4);
 
-      table.Controls.Add(new Label { Text = "End time:", TextAlign = ContentAlignment.MiddleRight }, 0, 5);
+      // Row 5: End time
+      table.Controls.Add(new Label { Text = "End time:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 5);
       endTime = new TextBox { Dock = DockStyle.Fill, Text = "00:00:30" };
       table.Controls.Add(endTime, 1, 5);
-      table.Controls.Add(new Label { Text = "(HH:MM:SS)", TextAlign = ContentAlignment.MiddleLeft }, 2, 5);
+      table.Controls.Add(new Label { Text = "(HH:MM:SS)", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill }, 2, 5);
 
-      table.Controls.Add(new Label { Text = "Audio codec:", TextAlign = ContentAlignment.MiddleRight }, 0, 6);
+      // Row 6: Audio codec
+      table.Controls.Add(new Label { Text = "Audio codec:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 6);
       cmbAudioCodec = new ComboBox
       {
         Dock = DockStyle.Fill,
@@ -214,9 +229,10 @@ namespace DMF
         SelectedIndex = 0
       };
       table.Controls.Add(cmbAudioCodec, 1, 6);
-      table.Controls.Add(new Label(), 2, 6);
+      table.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 6);
 
-      table.Controls.Add(new Label { Text = "Video codec:", TextAlign = ContentAlignment.MiddleRight }, 0, 7);
+      // Row 7: Video codec
+      table.Controls.Add(new Label { Text = "Video codec:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 7);
       cmbVideoCodec = new ComboBox
       {
         Dock = DockStyle.Fill,
@@ -225,19 +241,69 @@ namespace DMF
         SelectedIndex = 0
       };
       table.Controls.Add(cmbVideoCodec, 1, 7);
-      table.Controls.Add(new Label(), 2, 7);
+      table.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 7);
 
-      var bottomPanel = new Panel { Dock = DockStyle.Bottom, Height = 50, Padding = new Padding(10) };
+      // Row 8: Checkbox
+      table.Controls.Add(new Label { Dock = DockStyle.Fill }, 0, 8);
+      chkOpenOnSuccess = new CheckBox
+      {
+        Text = "Open folder on success",
+        AutoSize = false,
+        Size = new Size(180, 20),
+        Anchor = AnchorStyles.Left,
+        Checked = true
+      };
+      table.Controls.Add(chkOpenOnSuccess, 1, 8);
+      table.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 8);
+
+      var bottomPanel = new Panel
+      {
+        Dock = DockStyle.Bottom,
+        Height = 80,
+        Padding = new Padding(10)
+      };
       mainContainer.Controls.Add(bottomPanel);
+
+      var bottomLayout = new TableLayoutPanel
+      {
+        Dock = DockStyle.Fill,
+        ColumnCount = 1,
+        RowCount = 2,
+        Padding = new Padding(0)
+      };
+      bottomLayout.RowStyles.Clear();
+      bottomLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 20));
+      bottomLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+      bottomLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+      bottomPanel.Controls.Add(bottomLayout);
+
+      progressBar = new ProgressBar
+      {
+        Dock = DockStyle.Fill,
+        Style = ProgressBarStyle.Marquee,
+        Visible = false
+      };
+      bottomLayout.Controls.Add(progressBar, 0, 0);
+
+      var actionPanel = new TableLayoutPanel
+      {
+        Dock = DockStyle.Fill,
+        ColumnCount = 2,
+        RowCount = 1,
+        Padding = new Padding(0)
+      };
+      actionPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
+      actionPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+      bottomLayout.Controls.Add(actionPanel, 0, 1);
 
       btnProcess = new Button
       {
         Text = "Run FFmpeg",
-        Dock = DockStyle.Left,
-        Width = 120,
-        BackColor = Color.LightGreen
+        Dock = DockStyle.Fill,
+        BackColor = Color.LightGreen,
+        Enabled = false
       };
-      bottomPanel.Controls.Add(btnProcess);
+      actionPanel.Controls.Add(btnProcess, 0, 0);
 
       status = new Label
       {
@@ -246,16 +312,7 @@ namespace DMF
         TextAlign = ContentAlignment.MiddleLeft,
         Padding = new Padding(10, 0, 0, 0)
       };
-      bottomPanel.Controls.Add(status);
-
-      progressBar = new ProgressBar
-      {
-        Dock = DockStyle.Bottom,
-        Height = 20,
-        Style = ProgressBarStyle.Marquee,
-        Visible = false
-      };
-      mainContainer.Controls.Add(progressBar);
+      actionPanel.Controls.Add(status, 1, 0);
 
       btnInput.Click += BtnInput_Click;
       btnOutput.Click += BtnOutput_Click;
@@ -265,10 +322,13 @@ namespace DMF
       UpdateTime();
     }
 
-    private void CmbTrimMode_SelectedIndexChanged(object? sender, EventArgs e)
+    private void UpdateProcessButton()
     {
-      UpdateTime();
+      btnProcess.Enabled = !string.IsNullOrWhiteSpace(inputFile.Text) &&
+                           !string.IsNullOrWhiteSpace(outputFile.Text);
     }
+
+    private void CmbTrimMode_SelectedIndexChanged(object? sender, EventArgs e) => UpdateTime();
 
     private void UpdateTime()
     {
@@ -369,13 +429,9 @@ namespace DMF
           argsList.Add($"-ss {start:hh\\:mm\\:ss}");
 
         if (trimMode == "Duration" && duration.HasValue)
-        {
           argsList.Add($"-t {duration.Value:hh\\:mm\\:ss}");
-        }
         else if (trimMode == "End time" && end.HasValue)
-        {
           argsList.Add($"-to {end.Value:hh\\:mm\\:ss}");
-        }
 
         argsList.Add($"-i \"{inputFile.Text}\"");
 
@@ -392,6 +448,9 @@ namespace DMF
 
         status.Text = "Done!";
         MessageBox.Show("Processing completed successfully!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+        if (chkOpenOnSuccess.Checked)
+          OpenFolder(outputFile.Text);
       }
       catch (Exception ex)
       {
@@ -402,6 +461,7 @@ namespace DMF
       {
         btnProcess.Enabled = true;
         progressBar.Visible = false;
+        UpdateProcessButton();
       }
     }
 
@@ -421,6 +481,27 @@ namespace DMF
 
       if (process.ExitCode != 0)
         throw new Exception($"FFmpeg exited with code {process.ExitCode}. Error: {error}");
+    }
+
+    private void OpenFolder(string path)
+    {
+      if (string.IsNullOrWhiteSpace(path))
+        return;
+
+      try
+      {
+        if (File.Exists(path))
+          Process.Start("explorer.exe", $"/select, \"{path}\"");
+        else
+        {
+          string? directory = Path.GetDirectoryName(path);
+          if (!string.IsNullOrEmpty(directory) && Directory.Exists(directory))
+            Process.Start("explorer.exe", directory);
+          else
+            MessageBox.Show("Could not open folder.", "Information", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+      }
+      catch (Exception ex) { MessageBox.Show($"Could not open folder: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)
