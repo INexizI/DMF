@@ -32,6 +32,9 @@ namespace DMF
     private ProgressBar progressBar = null!;
     private TableLayoutPanel timeTable = null!;
     private CheckBox chkOpenOnSuccess = null!;
+    private CheckBox chkAudioOnly = null!;
+    private readonly List<string> audioFormats = ["mp3", "m4a", "aac", "flac", "wav", "ogg", "opus", "ac3"];
+    private readonly List<string> videoFormats = ["mp4", "avi", "mkv", "mov", "webm", "flv", "wmv", "m4v", "ts"];
 
     [Serializable]
     public class Settings
@@ -154,7 +157,7 @@ namespace DMF
       {
         Text = "FFmpeg Processing",
         Dock = DockStyle.Top,
-        Height = 300,
+        Height = 330,
         Padding = new Padding(10),
         ForeColor = Color.White
       };
@@ -164,7 +167,7 @@ namespace DMF
       {
         Dock = DockStyle.Fill,
         ColumnCount = 3,
-        RowCount = 10,
+        RowCount = 11,
         Padding = new Padding(10),
         AutoSize = false
       };
@@ -196,9 +199,9 @@ namespace DMF
       {
         Dock = DockStyle.Fill,
         DropDownStyle = ComboBoxStyle.DropDownList,
-        Items = { "mp4", "avi", "mkv", "mov", "webm", "flv", "wmv", "m4v", "ts" },
-        SelectedIndex = 0
       };
+      cmbFormat.Items.AddRange(videoFormats.Cast<object>().ToArray());
+      cmbFormat.SelectedIndex = 0;
       table.Controls.Add(cmbFormat, 1, 2);
       table.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 2);
 
@@ -240,17 +243,17 @@ namespace DMF
         DropDownStyle = ComboBoxStyle.DropDownList,
         Items =
         {
-            "copy",
-            "aac",
-            "libfdk_aac",      // Fraunhofer FDK AAC (if compiled in)
-            "mp3",
-            "libmp3lame",
-            "ac3",
-            "flac",
-            "opus",            // libopus
-            "libvorbis",
-            "pcm_s16le",       // uncompressed PCM
-            "wav"              // WAV (actually pcm_s16le wrapped)
+          "copy",
+          "aac",
+          "libfdk_aac",
+          "mp3",
+          "libmp3lame",
+          "ac3",
+          "flac",
+          "opus",
+          "libvorbis",
+          "pcm_s16le",
+          "wav"
         },
         SelectedIndex = 0
       };
@@ -263,30 +266,31 @@ namespace DMF
       {
         Dock = DockStyle.Fill,
         DropDownStyle = ComboBoxStyle.DropDownList,
-        Items = {
+        Items =
+        {
           "copy",
-          "libx264",         // software H.264
-          "libx265",         // software H.265/HEVC
-          "libvpx-vp9",      // VP9
-          "libvpx",          // VP8
-          "mpeg4",           // MPEG-4 part 2
-          "libxvid",         // Xvid (MPEG-4)
-          "mpeg2video",      // MPEG-2
-          "wmv2",            // Windows Media Video 2
-          "h264_nvenc",      // NVIDIA H.264
-          "hevc_nvenc",      // NVIDIA HEVC
-          "h264_amf",        // AMD H.264
-          "hevc_amf",        // AMD HEVC
-          "h264_qsv",        // Intel QuickSync H.264
-          "hevc_qsv",        // Intel QuickSync HEVC
-          "libaom-av1"       // AV1 (software, slow)
+          "libx264",
+          "libx265",
+          "libvpx-vp9",
+          "libvpx",
+          "mpeg4",
+          "libxvid",
+          "mpeg2video",
+          "wmv2",
+          "h264_nvenc",
+          "hevc_nvenc",
+          "h264_amf",
+          "hevc_amf",
+          "h264_qsv",
+          "hevc_qsv",
+          "libaom-av1"
         },
         SelectedIndex = 0
       };
       table.Controls.Add(cmbVideoCodec, 1, 8);
       table.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 8);
 
-      // Row 9: Checkbox
+      // Row 9: Open folder on success
       table.Controls.Add(new Label { Dock = DockStyle.Fill }, 0, 9);
       chkOpenOnSuccess = new CheckBox
       {
@@ -298,6 +302,19 @@ namespace DMF
       };
       table.Controls.Add(chkOpenOnSuccess, 1, 9);
       table.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 9);
+
+      // Row 10: Audio only checkbox
+      table.Controls.Add(new Label { Dock = DockStyle.Fill }, 0, 10);
+      chkAudioOnly = new CheckBox
+      {
+        Text = "Audio only",
+        AutoSize = false,
+        Size = new Size(100, 20),
+        Anchor = AnchorStyles.Left,
+        Checked = false
+      };
+      table.Controls.Add(chkAudioOnly, 1, 10);
+      table.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 10);
 
       var bottomPanel = new Panel
       {
@@ -362,6 +379,7 @@ namespace DMF
       btnProcess.Click += BtnProcess_Click;
       cmbFormat.SelectedIndexChanged += CmbFormat_SelectedIndexChanged;
       cmbTrimMode.SelectedIndexChanged += CmbTrimMode_SelectedIndexChanged;
+      chkAudioOnly.CheckedChanged += ChkAudioOnly_CheckedChanged;
 
       UpdateTime();
     }
@@ -428,6 +446,26 @@ namespace DMF
         outputFile.Text = newPath;
     }
 
+    private void ChkAudioOnly_CheckedChanged(object? sender, EventArgs e)
+    {
+      bool audioOnly = chkAudioOnly.Checked;
+      cmbVideoCodec.Enabled = !audioOnly;
+
+      string currentFormat = cmbFormat.SelectedItem?.ToString() ?? "";
+
+      cmbFormat.Items.Clear();
+      if (audioOnly)
+        cmbFormat.Items.AddRange(audioFormats.Cast<object>().ToArray());
+      else
+        cmbFormat.Items.AddRange(videoFormats.Cast<object>().ToArray());
+
+      int index = cmbFormat.Items.IndexOf(currentFormat);
+      if (index >= 0)
+        cmbFormat.SelectedIndex = index;
+      else
+        cmbFormat.SelectedIndex = 0;
+    }
+
     private async void BtnProcess_Click(object? sender, EventArgs e)
     {
       if (string.IsNullOrWhiteSpace(inputFile.Text) || !File.Exists(inputFile.Text))
@@ -476,6 +514,7 @@ namespace DMF
 
       string audioCodec = cmbAudioCodec.SelectedItem?.ToString() ?? "copy";
       string videoCodec = cmbVideoCodec.SelectedItem?.ToString() ?? "copy";
+      bool audioOnly = chkAudioOnly.Checked;
 
       btnProcess.Enabled = false;
       progressBar.Visible = true;
@@ -499,8 +538,12 @@ namespace DMF
 
         if (audioCodec != "copy")
           argsList.Add($"-c:a {audioCodec}");
-        if (videoCodec != "copy")
+
+        if (!audioOnly && videoCodec != "copy")
           argsList.Add($"-c:v {videoCodec}");
+
+        if (audioOnly)
+          argsList.Add("-vn");
 
         argsList.Add($"\"{outputFile.Text}\"");
 
