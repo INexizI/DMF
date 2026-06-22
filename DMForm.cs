@@ -14,27 +14,29 @@ namespace DMF
     /* Application Settings */
     private Settings settings = new();
     private readonly string settingsFile = "settings.json";
-
     /* UI Controls */
     private TextBox inputFile = null!;
     private Button btnInput = null!;
     private TextBox outputFile = null!;
     private Button btnOutput = null!;
-    private ComboBox cmbFormat = null!;
-    private ComboBox cmbTrimMode = null!;
+    private ComboBox format = null!;
+    private ComboBox trimMode = null!;
     private TextBox startTime = null!;
-    private TextBox durationTime = null!;
     private TextBox endTime = null!;
-    private ComboBox cmbAudioCodec = null!;
-    private ComboBox cmbVideoCodec = null!;
+    private ComboBox audioCodec = null!;
+    private ComboBox videoCodec = null!;
     private Button btnProcess = null!;
     private Label status = null!;
     private ProgressBar progressBar = null!;
     private TableLayoutPanel timeTable = null!;
-    private CheckBox chkOpenOnSuccess = null!;
-    private CheckBox chkAudioOnly = null!;
+    private CheckBox openOnSuccess = null!;
+    private CheckBox audioOnly = null!;
     private readonly List<string> audioFormats = ["mp3", "m4a", "aac", "flac", "wav", "ogg", "opus", "ac3"];
     private readonly List<string> videoFormats = ["mp4", "avi", "mkv", "mov", "webm", "flv", "wmv", "m4v", "ts"];
+    private bool _autoOutput = false;
+    private const string InputPlaceholder = "Select input file...";
+    private const string OutputPlaceholder = "Select output file...";
+    private const string TimePlaceholder = "HH:MM:SS";
 
     [Serializable]
     public class Settings
@@ -53,8 +55,10 @@ namespace DMF
       LoadSettings();
       InitializeForm();
       InitializeLayout();
-      chkOpenOnSuccess.Checked = settings.OpenOnSuccess;
+      openOnSuccess.Checked = settings.OpenOnSuccess;
       UpdateProcessButton();
+      SetPlaceholders();
+      UpdateTimeFields();
     }
 
     private void LoadSettings()
@@ -99,7 +103,7 @@ namespace DMF
       }
 
       FormBorderStyle = settings.Resizing ?
-          FormBorderStyle.FixedSingle : FormBorderStyle.Sizable;
+        FormBorderStyle.FixedSingle : FormBorderStyle.Sizable;
       MaximizeBox = !settings.Resizing;
     }
 
@@ -115,7 +119,7 @@ namespace DMF
           settings.WinY = Location.Y;
         }
         settings.WinMax = WindowState == FormWindowState.Maximized;
-        settings.OpenOnSuccess = chkOpenOnSuccess.Checked;
+        settings.OpenOnSuccess = openOnSuccess.Checked;
 
         var settingsToSave = new Settings
         {
@@ -167,7 +171,7 @@ namespace DMF
       {
         Dock = DockStyle.Fill,
         ColumnCount = 3,
-        RowCount = 11,
+        RowCount = 10,
         Padding = new Padding(10),
         AutoSize = false
       };
@@ -181,6 +185,8 @@ namespace DMF
       table.Controls.Add(new Label { Text = "Input:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 0);
       inputFile = new TextBox { Dock = DockStyle.Fill };
       inputFile.TextChanged += (s, e) => UpdateProcessButton();
+      inputFile.GotFocus += (s, e) => RemovePlaceholder(inputFile, InputPlaceholder);
+      inputFile.LostFocus += (s, e) => RestorePlaceholder(inputFile, InputPlaceholder);
       table.Controls.Add(inputFile, 1, 0);
       btnInput = new Button { Text = "Browse...", Dock = DockStyle.Fill };
       table.Controls.Add(btnInput, 2, 0);
@@ -189,55 +195,53 @@ namespace DMF
       table.Controls.Add(new Label { Text = "Output:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 1);
       outputFile = new TextBox { Dock = DockStyle.Fill };
       outputFile.TextChanged += (s, e) => UpdateProcessButton();
+      outputFile.GotFocus += (s, e) => RemovePlaceholder(outputFile, OutputPlaceholder);
+      outputFile.LostFocus += (s, e) => RestorePlaceholder(outputFile, OutputPlaceholder);
       table.Controls.Add(outputFile, 1, 1);
       btnOutput = new Button { Text = "Browse...", Dock = DockStyle.Fill };
       table.Controls.Add(btnOutput, 2, 1);
 
       // Row 2: Format
       table.Controls.Add(new Label { Text = "Format:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 2);
-      cmbFormat = new ComboBox
+      format = new ComboBox
       {
         Dock = DockStyle.Fill,
         DropDownStyle = ComboBoxStyle.DropDownList,
       };
-      cmbFormat.Items.AddRange(videoFormats.Cast<object>().ToArray());
-      cmbFormat.SelectedIndex = 0;
-      table.Controls.Add(cmbFormat, 1, 2);
+      format.Items.AddRange(videoFormats.Cast<object>().ToArray());
+      format.SelectedIndex = 0;
+      table.Controls.Add(format, 1, 2);
       table.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 2);
 
       // Row 3: Trim mode
       table.Controls.Add(new Label { Text = "Trim mode:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 3);
-      cmbTrimMode = new ComboBox
+      trimMode = new ComboBox
       {
         Dock = DockStyle.Fill,
         DropDownStyle = ComboBoxStyle.DropDownList,
-        Items = { "Source", "Duration", "End time" },
+        Items = { "Source", "Range" },
         SelectedIndex = 0
       };
-      table.Controls.Add(cmbTrimMode, 1, 3);
+      table.Controls.Add(trimMode, 1, 3);
       table.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 3);
 
       // Row 4: Start time
       table.Controls.Add(new Label { Text = "Start time:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 4);
-      startTime = new TextBox { Dock = DockStyle.Fill, Text = "00:00:00" };
+      startTime = new TextBox { Dock = DockStyle.Fill };
+      startTime.GotFocus += (s, e) => RemovePlaceholder(startTime, TimePlaceholder);
+      startTime.LostFocus += (s, e) => RestorePlaceholder(startTime, TimePlaceholder);
       table.Controls.Add(startTime, 1, 4);
-      table.Controls.Add(new Label { Text = "(HH:MM:SS)", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill }, 2, 4);
 
-      // Row 5: Duration
-      table.Controls.Add(new Label { Text = "Duration:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 5);
-      durationTime = new TextBox { Dock = DockStyle.Fill, Text = "00:00:10" };
-      table.Controls.Add(durationTime, 1, 5);
-      table.Controls.Add(new Label { Text = "(HH:MM:SS)", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill }, 2, 5);
+      // Row 5: End time
+      table.Controls.Add(new Label { Text = "End time:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 5);
+      endTime = new TextBox { Dock = DockStyle.Fill };
+      endTime.GotFocus += (s, e) => RemovePlaceholder(endTime, TimePlaceholder);
+      endTime.LostFocus += (s, e) => RestorePlaceholder(endTime, TimePlaceholder);
+      table.Controls.Add(endTime, 1, 5);
 
-      // Row 6: End time
-      table.Controls.Add(new Label { Text = "End time:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 6);
-      endTime = new TextBox { Dock = DockStyle.Fill, Text = "00:00:30" };
-      table.Controls.Add(endTime, 1, 6);
-      table.Controls.Add(new Label { Text = "(HH:MM:SS)", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill }, 2, 6);
-
-      // Row 7: Audio codec
-      table.Controls.Add(new Label { Text = "Audio codec:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 7);
-      cmbAudioCodec = new ComboBox
+      // Row 6: Audio codec
+      table.Controls.Add(new Label { Text = "Audio codec:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 6);
+      audioCodec = new ComboBox
       {
         Dock = DockStyle.Fill,
         DropDownStyle = ComboBoxStyle.DropDownList,
@@ -257,12 +261,12 @@ namespace DMF
         },
         SelectedIndex = 0
       };
-      table.Controls.Add(cmbAudioCodec, 1, 7);
-      table.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 7);
+      table.Controls.Add(audioCodec, 1, 6);
+      table.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 6);
 
-      // Row 8: Video codec
-      table.Controls.Add(new Label { Text = "Video codec:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 8);
-      cmbVideoCodec = new ComboBox
+      // Row 7: Video codec
+      table.Controls.Add(new Label { Text = "Video codec:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 7);
+      videoCodec = new ComboBox
       {
         Dock = DockStyle.Fill,
         DropDownStyle = ComboBoxStyle.DropDownList,
@@ -287,25 +291,12 @@ namespace DMF
         },
         SelectedIndex = 0
       };
-      table.Controls.Add(cmbVideoCodec, 1, 8);
-      table.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 8);
+      table.Controls.Add(videoCodec, 1, 7);
+      table.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 7);
 
-      // Row 9: Open folder on success
-      table.Controls.Add(new Label { Dock = DockStyle.Fill }, 0, 9);
-      chkOpenOnSuccess = new CheckBox
-      {
-        Text = "Open folder on success",
-        AutoSize = false,
-        Size = new Size(180, 20),
-        Anchor = AnchorStyles.Left,
-        Checked = true
-      };
-      table.Controls.Add(chkOpenOnSuccess, 1, 9);
-      table.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 9);
-
-      // Row 10: Audio only checkbox
-      table.Controls.Add(new Label { Dock = DockStyle.Fill }, 0, 10);
-      chkAudioOnly = new CheckBox
+      // Row 8: Audio only checkbox
+      table.Controls.Add(new Label { Dock = DockStyle.Fill }, 0, 8);
+      audioOnly = new CheckBox
       {
         Text = "Audio only",
         AutoSize = false,
@@ -313,8 +304,21 @@ namespace DMF
         Anchor = AnchorStyles.Left,
         Checked = false
       };
-      table.Controls.Add(chkAudioOnly, 1, 10);
-      table.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 10);
+      table.Controls.Add(audioOnly, 1, 8);
+      table.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 8);
+
+      // Row 9: Open folder on success
+      table.Controls.Add(new Label { Dock = DockStyle.Fill }, 0, 9);
+      openOnSuccess = new CheckBox
+      {
+        Text = "Open folder on success",
+        AutoSize = false,
+        Size = new Size(180, 20),
+        Anchor = AnchorStyles.Left,
+        Checked = true
+      };
+      table.Controls.Add(openOnSuccess, 1, 9);
+      table.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 9);
 
       var bottomPanel = new Panel
       {
@@ -377,37 +381,96 @@ namespace DMF
       btnInput.Click += BtnInput_Click;
       btnOutput.Click += BtnOutput_Click;
       btnProcess.Click += BtnProcess_Click;
-      cmbFormat.SelectedIndexChanged += CmbFormat_SelectedIndexChanged;
-      cmbTrimMode.SelectedIndexChanged += CmbTrimMode_SelectedIndexChanged;
-      chkAudioOnly.CheckedChanged += ChkAudioOnly_CheckedChanged;
+      format.SelectedIndexChanged += Format_SelectedIndexChanged;
+      trimMode.SelectedIndexChanged += TrimMode_SelectedIndexChanged;
+      audioOnly.CheckedChanged += ChkAudioOnly_CheckedChanged;
 
-      UpdateTime();
+      UpdateTimeFields();
+    }
+
+    private void SetPlaceholders()
+    {
+      SetPlaceholder(inputFile, InputPlaceholder);
+      SetPlaceholder(outputFile, OutputPlaceholder);
+      SetPlaceholder(startTime, TimePlaceholder);
+      SetPlaceholder(endTime, TimePlaceholder);
+    }
+
+    private void SetPlaceholder(TextBox tb, string placeholder)
+    {
+      if (string.IsNullOrWhiteSpace(tb.Text))
+      {
+        tb.Text = placeholder;
+        tb.ForeColor = Color.Gray;
+      }
+    }
+
+    private static void RemovePlaceholder(TextBox tb, string placeholder)
+    {
+      if (tb.Text == placeholder)
+      {
+        tb.Text = "";
+        tb.ForeColor = SystemColors.WindowText;
+      }
+    }
+
+    private void RestorePlaceholder(TextBox tb, string placeholder)
+    {
+      if (string.IsNullOrWhiteSpace(tb.Text))
+      {
+        tb.Text = placeholder;
+        tb.ForeColor = Color.Gray;
+      }
+    }
+
+    private static bool IsPlaceholder(TextBox tb, string placeholder) => tb.Text == placeholder;
+
+    private string GetDefaultOutputPath()
+    {
+      string downloads = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+      if (!Directory.Exists(downloads))
+        downloads = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+
+      string baseName = Path.GetFileNameWithoutExtension(inputFile.Text);
+      if (string.IsNullOrEmpty(baseName) || IsPlaceholder(inputFile, InputPlaceholder))
+        baseName = "output";
+      else
+        baseName = "output-" + baseName;
+
+      string fmt = format.SelectedItem?.ToString() ?? "mp4";
+      string fileName = $"{baseName}.{fmt}";
+      return Path.Combine(downloads, fileName);
+    }
+
+    private void SetDefaultOutputIfEmpty()
+    {
+      if (string.IsNullOrWhiteSpace(outputFile.Text) || IsPlaceholder(outputFile, OutputPlaceholder))
+      {
+        string defaultPath = GetDefaultOutputPath();
+        outputFile.Text = defaultPath;
+        outputFile.ForeColor = SystemColors.WindowText;
+        _autoOutput = true;
+      }
     }
 
     private void UpdateProcessButton()
     {
-      btnProcess.Enabled = !string.IsNullOrWhiteSpace(inputFile.Text) &&
-                           !string.IsNullOrWhiteSpace(outputFile.Text);
+      bool inputValid = !string.IsNullOrWhiteSpace(inputFile.Text) && !IsPlaceholder(inputFile, InputPlaceholder);
+      bool outputValid = !string.IsNullOrWhiteSpace(outputFile.Text) && !IsPlaceholder(outputFile, OutputPlaceholder);
+      btnProcess.Enabled = inputValid && outputValid;
     }
 
-    private void CmbTrimMode_SelectedIndexChanged(object? sender, EventArgs e) => UpdateTime();
+    private void TrimMode_SelectedIndexChanged(object? sender, EventArgs e) => UpdateTimeFields();
 
-    private void UpdateTime()
+    private void UpdateTimeFields()
     {
-      if (timeTable == null) return;
+      if (startTime == null || endTime == null || trimMode == null) return;
 
-      string mode = cmbTrimMode.SelectedItem?.ToString() ?? "Duration";
-      bool showDuration = mode == "Duration";
-      bool showEnd = mode == "End time";
+      string mode = trimMode.SelectedItem?.ToString() ?? "Source";
+      bool isRange = mode == "Range";
 
-      foreach (Control ctrl in timeTable.Controls)
-      {
-        int row = timeTable.GetRow(ctrl);
-        if (row == 5)
-          ctrl.Visible = showDuration;
-        else if (row == 6)
-          ctrl.Visible = showEnd;
-      }
+      startTime.Enabled = isRange;
+      endTime.Enabled = isRange;
     }
 
     private void BtnInput_Click(object? sender, EventArgs e)
@@ -416,7 +479,11 @@ namespace DMF
       file.Title = "Select input file";
       file.Filter = "Media files|*.mp4;*.avi;*.mkv;*.mov;*.wmv;*.flv;*.webm|All files|*.*";
       if (file.ShowDialog() == DialogResult.OK)
+      {
         inputFile.Text = file.FileName;
+        inputFile.ForeColor = SystemColors.WindowText;
+        SetDefaultOutputIfEmpty();
+      }
     }
 
     private void BtnOutput_Click(object? sender, EventArgs e)
@@ -424,82 +491,95 @@ namespace DMF
       using var file = new SaveFileDialog();
       file.Title = "Select output file";
 
-      string format = cmbFormat.SelectedItem?.ToString() ?? "mp4";
-      file.Filter = $"{format.ToUpper()} files|*.{format}|All files|*.*";
-      file.DefaultExt = format;
+      string fmt = format.SelectedItem?.ToString() ?? "mp4";
+      file.Filter = $"{fmt.ToUpper()} files|*.{fmt}|All files|*.*";
+      file.DefaultExt = fmt;
 
       if (file.ShowDialog() == DialogResult.OK)
+      {
         outputFile.Text = file.FileName;
+        outputFile.ForeColor = SystemColors.WindowText;
+        _autoOutput = false;
+        UpdateProcessButton();
+      }
     }
 
-    private void CmbFormat_SelectedIndexChanged(object? sender, EventArgs e)
+    private void Format_SelectedIndexChanged(object? sender, EventArgs e)
     {
-      if (string.IsNullOrWhiteSpace(outputFile.Text))
-        return;
-
-      string current = outputFile.Text;
-      string? dir = Path.GetDirectoryName(current);
-      string fileName = Path.GetFileNameWithoutExtension(current);
-      string newExt = cmbFormat.SelectedItem?.ToString() ?? "mp4";
-      string newPath = Path.Combine(dir ?? "", fileName + "." + newExt);
-      if (!string.Equals(current, newPath, StringComparison.OrdinalIgnoreCase))
-        outputFile.Text = newPath;
+      if (_autoOutput && !string.IsNullOrWhiteSpace(outputFile.Text) && !IsPlaceholder(outputFile, OutputPlaceholder))
+      {
+        string current = outputFile.Text;
+        string? dir = Path.GetDirectoryName(current);
+        string fileName = Path.GetFileNameWithoutExtension(current);
+        string newExt = format.SelectedItem?.ToString() ?? "mp4";
+        string newPath = Path.Combine(dir ?? "", fileName + "." + newExt);
+        if (!string.Equals(current, newPath, StringComparison.OrdinalIgnoreCase))
+        {
+          outputFile.Text = newPath;
+          outputFile.ForeColor = SystemColors.WindowText;
+        }
+      }
     }
 
     private void ChkAudioOnly_CheckedChanged(object? sender, EventArgs e)
     {
-      bool audioOnly = chkAudioOnly.Checked;
-      cmbVideoCodec.Enabled = !audioOnly;
+      bool audioOnlyChecked = audioOnly.Checked;
+      videoCodec.Enabled = !audioOnlyChecked;
 
-      string currentFormat = cmbFormat.SelectedItem?.ToString() ?? "";
+      string currentFormat = format.SelectedItem?.ToString() ?? "";
 
-      cmbFormat.Items.Clear();
-      if (audioOnly)
-        cmbFormat.Items.AddRange(audioFormats.Cast<object>().ToArray());
+      format.Items.Clear();
+      if (audioOnlyChecked)
+        format.Items.AddRange(audioFormats.Cast<object>().ToArray());
       else
-        cmbFormat.Items.AddRange(videoFormats.Cast<object>().ToArray());
+        format.Items.AddRange(videoFormats.Cast<object>().ToArray());
 
-      int index = cmbFormat.Items.IndexOf(currentFormat);
+      int index = format.Items.IndexOf(currentFormat);
       if (index >= 0)
-        cmbFormat.SelectedIndex = index;
+        format.SelectedIndex = index;
       else
-        cmbFormat.SelectedIndex = 0;
+        format.SelectedIndex = 0;
+
+      if (_autoOutput && !string.IsNullOrWhiteSpace(inputFile.Text) && !IsPlaceholder(inputFile, InputPlaceholder))
+        SetDefaultOutputIfEmpty();
     }
 
     private async void BtnProcess_Click(object? sender, EventArgs e)
     {
-      if (string.IsNullOrWhiteSpace(inputFile.Text) || !File.Exists(inputFile.Text))
+      if (string.IsNullOrWhiteSpace(inputFile.Text) || IsPlaceholder(inputFile, InputPlaceholder) || !File.Exists(inputFile.Text))
       {
         MessageBox.Show("Please select a valid input file.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
         return;
       }
-      if (string.IsNullOrWhiteSpace(outputFile.Text))
+
+      if (string.IsNullOrWhiteSpace(outputFile.Text) || IsPlaceholder(outputFile, OutputPlaceholder))
+        SetDefaultOutputIfEmpty();
+
+      if (string.IsNullOrWhiteSpace(outputFile.Text) || IsPlaceholder(outputFile, OutputPlaceholder))
       {
         MessageBox.Show("Please select an output file.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
         return;
       }
-      if (!TimeSpan.TryParse(startTime.Text, out TimeSpan start))
-      {
-        MessageBox.Show("Invalid start time. Use HH:MM:SS format.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-        return;
-      }
 
-      string trimMode = cmbTrimMode.SelectedItem?.ToString() ?? "Duration";
-      TimeSpan? duration = null;
+      string trimModeStr = trimMode.SelectedItem?.ToString() ?? "Source";
+      TimeSpan start = TimeSpan.Zero;
       TimeSpan? end = null;
 
-      if (trimMode == "Duration")
+      if (trimModeStr == "Source")
       {
-        if (!TimeSpan.TryParse(durationTime.Text, out TimeSpan dur) || dur.TotalSeconds <= 0)
+        // No trimming
+      }
+      else
+      {
+        if (IsPlaceholder(startTime, TimePlaceholder) || string.IsNullOrWhiteSpace(startTime.Text))
+          start = TimeSpan.Zero;
+        else if (!TimeSpan.TryParse(startTime.Text, out start))
         {
-          MessageBox.Show("Invalid duration. Use HH:MM:SS format and must be > 0.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+          MessageBox.Show("Invalid start time. Use HH:MM:SS format.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
           return;
         }
-        duration = dur;
-      }
-      else if (trimMode == "End time")
-      {
-        if (!TimeSpan.TryParse(endTime.Text, out TimeSpan endTs) || endTs.TotalSeconds <= 0)
+
+        if (IsPlaceholder(endTime, TimePlaceholder) || !TimeSpan.TryParse(endTime.Text, out TimeSpan endTs) || endTs.TotalSeconds <= 0)
         {
           MessageBox.Show("Invalid end time. Use HH:MM:SS format and must be > 0.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
           return;
@@ -512,9 +592,9 @@ namespace DMF
         }
       }
 
-      string audioCodec = cmbAudioCodec.SelectedItem?.ToString() ?? "copy";
-      string videoCodec = cmbVideoCodec.SelectedItem?.ToString() ?? "copy";
-      bool audioOnly = chkAudioOnly.Checked;
+      string audioCodecSelected = audioCodec.SelectedItem?.ToString() ?? "copy";
+      string videoCodecSelected = videoCodec.SelectedItem?.ToString() ?? "copy";
+      bool audioOnlyChecked = audioOnly.Checked;
 
       btnProcess.Enabled = false;
       progressBar.Visible = true;
@@ -526,23 +606,23 @@ namespace DMF
         string ffmpegPath = "ffmpeg";
         var argsList = new List<string>();
 
-        if (start.TotalSeconds > 0)
-          argsList.Add($"-ss {start:hh\\:mm\\:ss}");
-
-        if (trimMode == "Duration" && duration.HasValue)
-          argsList.Add($"-t {duration.Value:hh\\:mm\\:ss}");
-        else if (trimMode == "End time" && end.HasValue)
-          argsList.Add($"-to {end.Value:hh\\:mm\\:ss}");
+        if (trimModeStr != "Source")
+        {
+          if (start.TotalSeconds > 0)
+            argsList.Add($"-ss {start:hh\\:mm\\:ss}");
+          if (end.HasValue)
+            argsList.Add($"-to {end.Value:hh\\:mm\\:ss}");
+        }
 
         argsList.Add($"-i \"{inputFile.Text}\"");
 
-        if (audioCodec != "copy")
-          argsList.Add($"-c:a {audioCodec}");
+        if (audioCodecSelected != "copy")
+          argsList.Add($"-c:a {audioCodecSelected}");
 
-        if (!audioOnly && videoCodec != "copy")
-          argsList.Add($"-c:v {videoCodec}");
+        if (!audioOnlyChecked && videoCodecSelected != "copy")
+          argsList.Add($"-c:v {videoCodecSelected}");
 
-        if (audioOnly)
+        if (audioOnlyChecked)
           argsList.Add("-vn");
 
         argsList.Add($"\"{outputFile.Text}\"");
@@ -554,7 +634,7 @@ namespace DMF
         status.Text = "Done!";
         MessageBox.Show("Processing completed successfully!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-        if (chkOpenOnSuccess.Checked)
+        if (openOnSuccess.Checked)
           OpenFolder(outputFile.Text);
       }
       catch (Exception ex)
