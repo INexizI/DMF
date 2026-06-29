@@ -61,6 +61,7 @@ namespace DMF
     private const string InputPlaceholder = "Select input file...";
     private const string OutputPlaceholder = "Select output file...";
     private const string TimePlaceholder = "HH:MM:SS";
+    private ToolTip toolTip = new ToolTip();
 
     private readonly Dictionary<string, string> audioCodecDescriptions = new()
     {
@@ -374,7 +375,7 @@ namespace DMF
         Increment = 1
       };
       tableVideo.Controls.Add(crf, 1, 0);
-      tableVideo.Controls.Add(new Label { Text = "(0–51, lower = better)", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 0);
+      tableVideo.Controls.Add(new Label { Text = "0–51 (lower = better)", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 0);
 
       // Row 1: Preset
       tableVideo.Controls.Add(new Label { Text = "Preset:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 1);
@@ -489,20 +490,75 @@ namespace DMF
       };
       tableFilters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
       tableFilters.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-      tableFilters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+      tableFilters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
       tabFilters.Controls.Add(tableFilters);
 
       // Row 0: Video filter
       tableFilters.Controls.Add(new Label { Text = "Video filter:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 0);
       videoFilter = new TextBox { Dock = DockStyle.Fill, Text = "" };
       tableFilters.Controls.Add(videoFilter, 1, 0);
-      tableFilters.Controls.Add(new Label { Text = "e.g. scale=1280:-2", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 0);
+      Label videoHint = new Label { Text = "e.g. fade=in:0:5", TextAlign = ContentAlignment.MiddleCenter, Dock = DockStyle.Fill, ForeColor = Color.Gray };
+      tableFilters.Controls.Add(videoHint, 2, 0);
+      toolTip.SetToolTip(videoHint,
+        "Common video filters:\n" +
+        "\n" +
+        "• scale=W:H – resize (use -2 for auto even height)\n" +
+        "• crop=W:H:X:Y – crop video\n" +
+        "• hflip / vflip – flip horizontally/vertically\n" +
+        "• rotate=A – rotate by angle (degrees)\n" +
+        "• fade=in:0:30 – fade in/out\n" +
+        "• overlay=X:Y – overlay another video\n" +
+        "• unsharp – sharpen/soften (see docs)\n" +
+        "• eq – brightness, contrast, saturation");
 
-      // Row 1: Audio filter
-      tableFilters.Controls.Add(new Label { Text = "Audio filter:", TextAlign = ContentAlignment.MiddleRight, Padding = new Padding(0, 5, 0, 0), Dock = DockStyle.Top }, 0, 1);
+      // Row 1: Video filter hint
+      tableFilters.Controls.Add(new Label { Text = "Video examples:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 0, 1);
+      var hintVideo = new Label
+      {
+        Text = "scale=1280:-2, crop=1920:1080:0:0, hflip, vflip, rotate=45, fade=out:0:30, overlay=10:10, unsharp=5:5:1.0, eq=contrast=1.2:brightness=0.1:saturation=1.0\n",
+        TextAlign = ContentAlignment.MiddleLeft,
+        Dock = DockStyle.Fill,
+        ForeColor = Color.Gray,
+        Font = new Font("Segoe UI", 8, FontStyle.Regular),
+        AutoSize = true,
+        UseCompatibleTextRendering = true
+      };
+      tableFilters.SetColumnSpan(hintVideo, 2);
+      tableFilters.Controls.Add(hintVideo, 1, 1);
+
+      // Row 2: Audio filter
+      tableFilters.Controls.Add(new Label { Text = "Audio filter:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 2);
       audioFilter = new TextBox { Dock = DockStyle.Fill, Text = "" };
-      tableFilters.Controls.Add(audioFilter, 1, 1);
-      tableFilters.Controls.Add(new Label { Text = "e.g. volume=1.5", TextAlign = ContentAlignment.BottomLeft, Dock = DockStyle.Top, ForeColor = Color.Gray }, 2, 1);
+      tableFilters.Controls.Add(audioFilter, 1, 2);
+      Label audioHint = new Label { Text = "e.g. volume=2", TextAlign = ContentAlignment.MiddleCenter, Dock = DockStyle.Fill, ForeColor = Color.Gray };
+      tableFilters.Controls.Add(audioHint, 2, 2);
+      toolTip.SetToolTip(audioHint,
+        "Common audio filters:\n" +
+        "\n" +
+        "• volume – (e.g. volume=1.5, volume=0.5)\n" +
+        "• afade – fade in/out (type, start seconds, duration)\n" +
+        "• equalizer – equalizer (frequency, type, width, gain)\n" +
+        "• pan – pan audio (e.g. mix to mono)\n" +
+        "• aecho – echo (in_gain, out_gain, delay, decay)\n" +
+        "• chorus – chorus effect\n" +
+        "• areverse – reverse audio\n" +
+        "• asetrate – change sample rate (Hz)\n" +
+        "• aresample – resample audio");
+
+      // Row 3: Audio filter hint
+      tableFilters.Controls.Add(new Label { Text = "Audio examples:", TextAlign = ContentAlignment.BottomRight, Padding = new Padding(0, 5, 0, 0), Dock = DockStyle.Top, ForeColor = Color.Gray }, 0, 3);
+      var hintAudio = new Label
+      {
+        Text = "volume=1.5, afadet=in:ss=0:d=5, equalizerf=100:t=h:w=1:g=-10, pan=mono|c0=0.5*c0+0.5*c1, aecho=0.8:0.9:1000:0.3, chorus=0.7:0.9:55:0.4:0.25:2, areverse, asetrate=44100, aresample=44100\n",
+        TextAlign = ContentAlignment.BottomLeft,
+        Dock = DockStyle.Top,
+        ForeColor = Color.Gray,
+        Font = new Font("Segoe UI", 8, FontStyle.Regular),
+        AutoSize = true,
+        UseCompatibleTextRendering = true
+      };
+      tableFilters.SetColumnSpan(hintAudio, 2);
+      tableFilters.Controls.Add(hintAudio, 1, 3);
 
       var tabAdvanced = new TabPage("Advanced");
       tabControl.TabPages.Add(tabAdvanced);
@@ -516,7 +572,7 @@ namespace DMF
       };
       tableAdvanced.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
       tableAdvanced.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-      tableAdvanced.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+      tableAdvanced.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
       tabAdvanced.Controls.Add(tableAdvanced);
 
       // Row 0: Map
@@ -555,7 +611,7 @@ namespace DMF
       hwPanel.Controls.Add(hwAccel, 0, 0);
       hwPanel.Controls.Add(hwAccelOutput, 1, 0);
       tableAdvanced.Controls.Add(hwPanel, 1, 1);
-      tableAdvanced.Controls.Add(new Label { Text = "decoder / output format", TextAlign = ContentAlignment.BottomLeft, Dock = DockStyle.Top, ForeColor = Color.Gray }, 2, 1);
+      tableAdvanced.Controls.Add(new Label { Text = "decoder/output", TextAlign = ContentAlignment.BottomLeft, Dock = DockStyle.Top, ForeColor = Color.Gray }, 2, 1);
 
       var bottomPanel = new Panel
       {
@@ -943,7 +999,7 @@ namespace DMF
         string args = string.Join(" ", argsList);
 
         // Debug: you can show the command if needed
-        MessageBox.Show(args, "Command");
+        // MessageBox.Show(args, "Command");
 
         await Task.Run(() => RunFFmpeg(ffmpegPath, args));
 
