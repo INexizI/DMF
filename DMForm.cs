@@ -152,8 +152,8 @@ namespace DMF
         {
           var workingArea = screen.WorkingArea;
           if (settings.WinX >= 0 && settings.WinY >= 0 &&
-              settings.WinX < workingArea.Width - 50 &&
-              settings.WinY < workingArea.Height - 50)
+            settings.WinX < workingArea.Width - 50 &&
+            settings.WinY < workingArea.Height - 50)
             Location = new Point(settings.WinX, settings.WinY);
           else
             StartPosition = FormStartPosition.CenterScreen;
@@ -211,7 +211,6 @@ namespace DMF
         Padding = new Point(10, 5)
       };
       mainContainer.Controls.Add(tabControl);
-
 
       var tabBasic = new TabPage("Basic");
       tabControl.TabPages.Add(tabBasic);
@@ -484,7 +483,7 @@ namespace DMF
       {
         Dock = DockStyle.Fill,
         ColumnCount = 3,
-        RowCount = 2,
+        RowCount = 4,
         Padding = new Padding(10),
         AutoSize = false
       };
@@ -678,7 +677,16 @@ namespace DMF
       trimMode.SelectedIndexChanged += TrimMode_SelectedIndexChanged;
       audioOnly.CheckedChanged += ChkAudioOnly_CheckedChanged;
 
+      trimMode.SelectedIndexChanged += (s, e) => UpdateTimeFields();
+      audioCodec.SelectedIndexChanged += (s, e) => { UpdateCodecHints(); UpdateControlStates(); };
+      videoCodec.SelectedIndexChanged += (s, e) => { UpdateCodecHints(); UpdateControlStates(); };
+      videoBitrate.TextChanged += (s, e) => UpdateControlStates();
+      crf.ValueChanged += (s, e) => UpdateControlStates();
+
+      audioOnly.CheckedChanged += ChkAudioOnly_CheckedChanged;
+
       UpdateTimeFields();
+      UpdateControlStates();
     }
 
     private void SetPlaceholders()
@@ -769,6 +777,36 @@ namespace DMF
 
     private void TrimMode_SelectedIndexChanged(object? sender, EventArgs e) => UpdateTimeFields();
 
+    private void UpdateControlStates()
+    {
+      if (inputFile == null) return;
+
+      bool audioOnlyChecked = audioOnly.Checked;
+      string videoCodecSelected = videoCodec.SelectedItem?.ToString() ?? "copy";
+      string audioCodecSelected = audioCodec.SelectedItem?.ToString() ?? "copy";
+      bool videoBitrateSet = !string.IsNullOrWhiteSpace(videoBitrate.Text);
+
+      // Video controls
+      bool videoEnabled = !audioOnlyChecked;
+      videoCodec.Enabled = videoEnabled;
+
+      bool encodingEnabled = videoEnabled && videoCodecSelected != "copy";
+      crf.Enabled = encodingEnabled && !videoBitrateSet;
+      preset.Enabled = encodingEnabled;
+      pixelFormat.Enabled = encodingEnabled;
+      videoBitrate.Enabled = encodingEnabled;
+      maxrate.Enabled = encodingEnabled && videoBitrateSet;
+      bufsize.Enabled = encodingEnabled && videoBitrateSet;
+      profile.Enabled = encodingEnabled;
+      gop.Enabled = encodingEnabled;
+      videoFilter.Enabled = encodingEnabled;
+
+      // Audio controls
+      bool audioEncoding = audioCodecSelected != "copy";
+      audioBitrate.Enabled = audioEncoding;
+      audioQuality.Enabled = audioEncoding;
+    }
+
     private void UpdateTimeFields()
     {
       if (startTime == null || endTime == null || trimMode == null) return;
@@ -831,8 +869,6 @@ namespace DMF
     private void ChkAudioOnly_CheckedChanged(object? sender, EventArgs e)
     {
       bool audioOnlyChecked = audioOnly.Checked;
-      videoCodec.Enabled = !audioOnlyChecked;
-
       string currentFormat = format.SelectedItem?.ToString() ?? "";
 
       format.Items.Clear();
@@ -849,6 +885,8 @@ namespace DMF
 
       if (_autoOutput && !string.IsNullOrWhiteSpace(inputFile.Text) && !IsPlaceholder(inputFile, InputPlaceholder))
         SetDefaultOutputIfEmpty();
+
+      UpdateControlStates();
     }
 
     private async void BtnProcess_Click(object? sender, EventArgs e)
@@ -997,9 +1035,6 @@ namespace DMF
         argsList.Add($"\"{outputFile.Text}\"");
 
         string args = string.Join(" ", argsList);
-
-        // Debug: you can show the command if needed
-        // MessageBox.Show(args, "Command");
 
         await Task.Run(() => RunFFmpeg(ffmpegPath, args));
 
