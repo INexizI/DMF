@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -62,6 +63,7 @@ namespace DMF
     private const string OutputPlaceholder = "Select output file...";
     private const string TimePlaceholder = "HH:MM:SS";
     private ToolTip toolTip = new ToolTip();
+    private double inputDuration = 0;
 
     private readonly Dictionary<string, string> audioCodecDescriptions = new()
     {
@@ -233,6 +235,7 @@ namespace DMF
       inputFile.TextChanged += (s, e) => UpdateProcessButton();
       inputFile.GotFocus += (s, e) => RemovePlaceholder(inputFile, InputPlaceholder);
       inputFile.LostFocus += (s, e) => RestorePlaceholder(inputFile, InputPlaceholder);
+      inputFile.Leave += async (s, e) => await UpdateDurationAsync();
       tableBasic.Controls.Add(inputFile, 1, 0);
       btnInput = new Button { Text = "Browse...", Dock = DockStyle.Fill };
       tableBasic.Controls.Add(btnInput, 2, 0);
@@ -268,6 +271,7 @@ namespace DMF
         Items = { "Source", "Range" },
         SelectedIndex = 0
       };
+      trimMode.SelectedIndexChanged += TrimMode_SelectedIndexChanged;
       tableBasic.Controls.Add(trimMode, 1, 3);
       tableBasic.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 3);
 
@@ -674,16 +678,12 @@ namespace DMF
       btnOutput.Click += BtnOutput_Click;
       btnProcess.Click += BtnProcess_Click;
       format.SelectedIndexChanged += Format_SelectedIndexChanged;
-      trimMode.SelectedIndexChanged += TrimMode_SelectedIndexChanged;
       audioOnly.CheckedChanged += ChkAudioOnly_CheckedChanged;
 
-      trimMode.SelectedIndexChanged += (s, e) => UpdateTimeFields();
       audioCodec.SelectedIndexChanged += (s, e) => { UpdateCodecHints(); UpdateControlStates(); };
       videoCodec.SelectedIndexChanged += (s, e) => { UpdateCodecHints(); UpdateControlStates(); };
       videoBitrate.TextChanged += (s, e) => UpdateControlStates();
       crf.ValueChanged += (s, e) => UpdateControlStates();
-
-      audioOnly.CheckedChanged += ChkAudioOnly_CheckedChanged;
 
       UpdateTimeFields();
       UpdateControlStates();
@@ -775,7 +775,24 @@ namespace DMF
       btnProcess.Enabled = inputValid && outputValid;
     }
 
-    private void TrimMode_SelectedIndexChanged(object? sender, EventArgs e) => UpdateTimeFields();
+    private void TrimMode_SelectedIndexChanged(object? sender, EventArgs e)
+    {
+      UpdateTimeFields();
+
+      if (trimMode.SelectedItem?.ToString() == "Range")
+      {
+        if (IsPlaceholder(startTime, TimePlaceholder) || string.IsNullOrWhiteSpace(startTime.Text))
+        {
+          startTime.Text = "00:00:00";
+          startTime.ForeColor = SystemColors.WindowText;
+        }
+        if (inputDuration > 0 && (IsPlaceholder(endTime, TimePlaceholder) || string.IsNullOrWhiteSpace(endTime.Text)))
+        {
+          endTime.Text = TimeSpan.FromSeconds(inputDuration).ToString(@"hh\:mm\:ss");
+          endTime.ForeColor = SystemColors.WindowText;
+        }
+      }
+    }
 
     private void UpdateControlStates()
     {
@@ -807,6 +824,47 @@ namespace DMF
       audioQuality.Enabled = audioEncoding;
     }
 
+    private async Task UpdateDurationAsync()
+    {
+      if (File.Exists(inputFile.Text))
+      {
+        inputDuration = await GetInputDurationAsync(inputFile.Text);
+        if (trimMode.SelectedItem?.ToString() == "Range")
+        {
+          startTime.Text = "00:00:00";
+          startTime.ForeColor = SystemColors.WindowText;
+          if (inputDuration > 0)
+          {
+            endTime.Text = TimeSpan.FromSeconds(inputDuration).ToString(@"hh\:mm\:ss");
+            endTime.ForeColor = SystemColors.WindowText;
+          }
+        }
+      }
+    }
+
+    private static async Task<double> GetInputDurationAsync(string filePath)
+    {
+      try
+      {
+        var psi = new ProcessStartInfo
+        {
+          FileName = "ffprobe",
+          Arguments = $"-v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 \"{filePath}\"",
+          UseShellExecute = false,
+          RedirectStandardOutput = true,
+          CreateNoWindow = true
+        };
+        using var process = Process.Start(psi);
+        if (process == null) return 0;
+        string output = await process.StandardOutput.ReadToEndAsync();
+        await process.WaitForExitAsync();
+        if (process.ExitCode == 0 && double.TryParse(output.Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out double duration))
+          return duration;
+        return 0;
+      }
+      catch { return 0; }
+    }
+
     private void UpdateTimeFields()
     {
       if (startTime == null || endTime == null || trimMode == null) return;
@@ -816,6 +874,20 @@ namespace DMF
 
       startTime.Enabled = isRange;
       endTime.Enabled = isRange;
+
+      if (!isRange)
+      {
+        if (!IsPlaceholder(startTime, TimePlaceholder))
+        {
+          startTime.Text = TimePlaceholder;
+          startTime.ForeColor = Color.Gray;
+        }
+        if (!IsPlaceholder(endTime, TimePlaceholder))
+        {
+          endTime.Text = TimePlaceholder;
+          endTime.ForeColor = Color.Gray;
+        }
+      }
     }
 
     private void BtnInput_Click(object? sender, EventArgs e)
@@ -828,6 +900,7 @@ namespace DMF
         inputFile.Text = file.FileName;
         inputFile.ForeColor = SystemColors.WindowText;
         SetDefaultOutputIfEmpty();
+        _ = UpdateDurationAsync();
       }
     }
 
