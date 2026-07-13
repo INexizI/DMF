@@ -778,20 +778,7 @@ namespace DMF
     private void TrimMode_SelectedIndexChanged(object? sender, EventArgs e)
     {
       UpdateTimeFields();
-
-      if (trimMode.SelectedItem?.ToString() == "Range")
-      {
-        if (IsPlaceholder(startTime, TimePlaceholder) || string.IsNullOrWhiteSpace(startTime.Text))
-        {
-          startTime.Text = "00:00:00";
-          startTime.ForeColor = SystemColors.WindowText;
-        }
-        if (inputDuration > 0 && (IsPlaceholder(endTime, TimePlaceholder) || string.IsNullOrWhiteSpace(endTime.Text)))
-        {
-          endTime.Text = TimeSpan.FromSeconds(inputDuration).ToString(@"hh\:mm\:ss");
-          endTime.ForeColor = SystemColors.WindowText;
-        }
-      }
+      FillTimeFieldsIfEmpty();
     }
 
     private void UpdateControlStates()
@@ -824,21 +811,43 @@ namespace DMF
       audioQuality.Enabled = audioEncoding;
     }
 
+    private void ForceUpdateTimeFields()
+    {
+      if (trimMode.SelectedItem?.ToString() != "Range") return;
+
+      startTime.Text = "00:00:00";
+      startTime.ForeColor = SystemColors.WindowText;
+
+      if (inputDuration > 0)
+      {
+        endTime.Text = TimeSpan.FromSeconds(inputDuration).ToString(@"hh\:mm\:ss");
+        endTime.ForeColor = SystemColors.WindowText;
+      }
+    }
+
+    private void FillTimeFieldsIfEmpty()
+    {
+      if (trimMode.SelectedItem?.ToString() != "Range") return;
+
+      if (IsPlaceholder(startTime, TimePlaceholder) || string.IsNullOrWhiteSpace(startTime.Text))
+      {
+        startTime.Text = "00:00:00";
+        startTime.ForeColor = SystemColors.WindowText;
+      }
+
+      if (inputDuration > 0 && (IsPlaceholder(endTime, TimePlaceholder) || string.IsNullOrWhiteSpace(endTime.Text)))
+      {
+        endTime.Text = TimeSpan.FromSeconds(inputDuration).ToString(@"hh\:mm\:ss");
+        endTime.ForeColor = SystemColors.WindowText;
+      }
+    }
+
     private async Task UpdateDurationAsync()
     {
       if (File.Exists(inputFile.Text))
       {
         inputDuration = await GetInputDurationAsync(inputFile.Text);
-        if (trimMode.SelectedItem?.ToString() == "Range")
-        {
-          startTime.Text = "00:00:00";
-          startTime.ForeColor = SystemColors.WindowText;
-          if (inputDuration > 0)
-          {
-            endTime.Text = TimeSpan.FromSeconds(inputDuration).ToString(@"hh\:mm\:ss");
-            endTime.ForeColor = SystemColors.WindowText;
-          }
-        }
+        ForceUpdateTimeFields();
       }
     }
 
@@ -890,6 +899,30 @@ namespace DMF
       }
     }
 
+    private void UpdateTimeFieldsForRange()
+    {
+      if (trimMode.SelectedItem?.ToString() != "Range") return;
+
+      if (IsPlaceholder(startTime, TimePlaceholder) || string.IsNullOrWhiteSpace(startTime.Text))
+      {
+        startTime.Text = "00:00:00";
+        startTime.ForeColor = SystemColors.WindowText;
+      }
+
+      if (inputDuration > 0 && (IsPlaceholder(endTime, TimePlaceholder) || string.IsNullOrWhiteSpace(endTime.Text)))
+      {
+        endTime.Text = TimeSpan.FromSeconds(inputDuration).ToString(@"hh\:mm\:ss");
+        endTime.ForeColor = SystemColors.WindowText;
+      }
+    }
+
+    private void SetAutoOutput()
+    {
+      outputFile.Text = GetDefaultOutputPath();
+      outputFile.ForeColor = SystemColors.WindowText;
+      _autoOutput = true;
+    }
+
     private void BtnInput_Click(object? sender, EventArgs e)
     {
       using var file = new OpenFileDialog();
@@ -899,7 +932,10 @@ namespace DMF
       {
         inputFile.Text = file.FileName;
         inputFile.ForeColor = SystemColors.WindowText;
-        SetDefaultOutputIfEmpty();
+
+        if (_autoOutput || string.IsNullOrWhiteSpace(outputFile.Text) || IsPlaceholder(outputFile, OutputPlaceholder))
+          SetAutoOutput();
+
         _ = UpdateDurationAsync();
       }
     }
