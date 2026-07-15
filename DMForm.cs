@@ -57,13 +57,20 @@ namespace DMF
     private ProgressBar progressBar = null!;
 
     private readonly List<string> audioFormats = ["mp3", "m4a", "aac", "flac", "wav", "ogg", "opus", "ac3"];
-    private readonly List<string> videoFormats = ["mp4", "avi", "mkv", "mov", "webm", "flv", "wmv", "m4v", "ts"];
+    private readonly List<string> videoFormats = ["mp4", "avi", "mkv", "mov", "webm", "flv", "wmv", "m4v", "ts", "gif"];
     private bool _autoOutput = false;
     private const string InputPlaceholder = "Select input file...";
     private const string OutputPlaceholder = "Select output file...";
     private const string TimePlaceholder = "HH:MM:SS";
     private ToolTip toolTip = new ToolTip();
     private double inputDuration = 0;
+    private NumericUpDown gifFps = null!;
+    private NumericUpDown gifScaleW = null!;
+    private NumericUpDown gifScaleH = null!;
+    private TextBox gifCrop = null!;
+    private CheckBox chkPalette = null!;
+    private ComboBox gifDither = null!;
+    private NumericUpDown gifBayerScale = null!;
 
     private readonly Dictionary<string, string> audioCodecDescriptions = new()
     {
@@ -616,6 +623,129 @@ namespace DMF
       tableAdvanced.Controls.Add(hwPanel, 1, 1);
       tableAdvanced.Controls.Add(new Label { Text = "decoder/output", TextAlign = ContentAlignment.BottomLeft, Dock = DockStyle.Top, ForeColor = Color.Gray }, 2, 1);
 
+      var tabGif = new TabPage("GIF");
+      tabControl.TabPages.Add(tabGif);
+      var tableGif = new TableLayoutPanel
+      {
+        Dock = DockStyle.Fill,
+        ColumnCount = 3,
+        RowCount = 6,
+        Padding = new Padding(10),
+        AutoSize = false,
+        MaximumSize = new Size(0, 185)
+      };
+      for (int i = 0; i < 5; i++)
+        tableGif.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+      tableGif.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
+      tableGif.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+      tableGif.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+      tabGif.Controls.Add(tableGif);
+
+      // Row 0: FPS
+      tableGif.Controls.Add(new Label { Text = "Frame rate:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 0);
+      gifFps = new NumericUpDown
+      {
+        Dock = DockStyle.Fill,
+        Minimum = 1,
+        Maximum = 60,
+        Value = 30,
+        Increment = 1
+      };
+      tableGif.Controls.Add(gifFps, 1, 0);
+      tableGif.Controls.Add(new Label { Text = "frames per second", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 0);
+
+      // Row 1: Scale
+      tableGif.Controls.Add(new Label { Text = "Scale:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 1);
+      var scalePanel = new TableLayoutPanel
+      {
+        Dock = DockStyle.Fill,
+        ColumnCount = 4,
+        RowCount = 1,
+        Padding = new Padding(0),
+        MaximumSize = new Size(0, 30)
+      };
+      scalePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 30));
+      scalePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35));
+      scalePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 30));
+      scalePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35));
+
+      gifScaleW = new NumericUpDown { Minimum = 0, Maximum = 4096, Value = 200, Increment = 10, Dock = DockStyle.Fill };
+      gifScaleH = new NumericUpDown { Minimum = 0, Maximum = 4096, Value = 0, Increment = 10, Dock = DockStyle.Fill };
+
+      scalePanel.Controls.Add(new Label { Text = "W:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 0);
+      scalePanel.Controls.Add(gifScaleW, 1, 0);
+      scalePanel.Controls.Add(new Label { Text = "H:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 2, 0);
+      scalePanel.Controls.Add(gifScaleH, 3, 0);
+
+      tableGif.Controls.Add(scalePanel, 1, 1);
+      tableGif.Controls.Add(new Label { Text = "0 = auto (keep aspect if set)", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 1);
+
+      // Row 2: Crop
+      tableGif.Controls.Add(new Label { Text = "Crop:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 2);
+      gifCrop = new TextBox
+      {
+        Dock = DockStyle.Fill,
+        ForeColor = Color.Gray,
+        Text = "w:h:x:y (0 for auto)"
+      };
+
+      gifCrop.GotFocus += (s, e) => RemovePlaceholder(gifCrop, "w:h:x:y (0 for auto)");
+      gifCrop.LostFocus += (s, e) => RestorePlaceholder(gifCrop, "w:h:x:y (0 for auto)");
+      tableGif.Controls.Add(gifCrop, 1, 2);
+
+      var cropHint = new Label
+      {
+        Text = "e.g. 640:480:0:0",
+        TextAlign = ContentAlignment.MiddleLeft,
+        Dock = DockStyle.Fill,
+        ForeColor = Color.Gray
+      };
+      toolTip.SetToolTip(cropHint,
+        "Crop filter syntax:\n" +
+        "• w:h:x:y – width, height, x offset, y offset\n" +
+        "• Use 0 for auto (e.g. 0:480:0:0 – auto width)\n" +
+        "• iw/ih variables: e.g. iw-100:ih-100:50:50\n" +
+        "• Example: crop=640:480:0:0");
+      tableGif.Controls.Add(cropHint, 2, 2);
+
+      // Row 3: Palette
+      tableGif.Controls.Add(new Label { Text = "Palette:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 3);
+      chkPalette = new CheckBox { Text = "Use palette generation (better quality)", AutoSize = true, Dock = DockStyle.Fill, Checked = true };
+      tableGif.Controls.Add(chkPalette, 1, 3);
+      tableGif.Controls.Add(new Label { Text = "recommended", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 3);
+
+      // Row 4: Dithering
+      tableGif.Controls.Add(new Label { Text = "Dithering:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 4);
+      gifDither = new ComboBox
+      {
+        Dock = DockStyle.Fill,
+        DropDownStyle = ComboBoxStyle.DropDownList,
+        Items = { "bayer", "heckbert", "floyd_steinberg", "sierra2", "sierra2_4a", "none" },
+        SelectedIndex = 0
+      };
+      gifDither.SelectedIndexChanged += (s, e) =>
+      {
+        string dither = gifDither.SelectedItem?.ToString() ?? "";
+        gifBayerScale.Enabled = dither == "bayer";
+      };
+      tableGif.Controls.Add(gifDither, 1, 4);
+      tableGif.Controls.Add(new Label { Text = "dithering algorithm", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 4);
+
+      // Row 5: Bayer scale
+      tableGif.Controls.Add(new Label { Text = "Bayer scale:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 5);
+      gifBayerScale = new NumericUpDown
+      {
+        Dock = DockStyle.Fill,
+        Minimum = 0,
+        Maximum = 5,
+        Value = 5,
+        Increment = 1,
+        Enabled = false
+      };
+      tableGif.Controls.Add(gifBayerScale, 1, 5);
+      tableGif.Controls.Add(new Label { Text = "0–5 (for Bayer dither)", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 5);
+
       var bottomPanel = new Panel
       {
         Dock = DockStyle.Bottom,
@@ -785,12 +915,59 @@ namespace DMF
     {
       if (inputFile == null) return;
 
+      bool isGif = format.SelectedItem?.ToString() == "gif";
+
+      if (isGif)
+      {
+        // ----- GIF mode: disable everything except GIF-specific controls -----
+        videoCodec.Enabled = false;
+        crf.Enabled = false;
+        preset.Enabled = false;
+        pixelFormat.Enabled = false;
+        videoBitrate.Enabled = false;
+        maxrate.Enabled = false;
+        bufsize.Enabled = false;
+        profile.Enabled = false;
+        gop.Enabled = false;
+        audioCodec.Enabled = false;
+        audioBitrate.Enabled = false;
+        audioQuality.Enabled = false;
+        videoFilter.Enabled = false;
+        audioFilter.Enabled = false;
+        mapStreams.Enabled = false;
+        hwAccel.Enabled = false;
+        hwAccelOutput.Enabled = false;
+        audioOnly.Enabled = false;
+        audioOnly.Checked = false;
+        gifFps.Enabled = true;
+        gifScaleW.Enabled = true;
+        gifScaleH.Enabled = true;
+        gifCrop.Enabled = true;
+        chkPalette.Enabled = true;
+        gifDither.Enabled = true;
+        string currentDither = gifDither.SelectedItem?.ToString() ?? "";
+        gifBayerScale.Enabled = gifDither.SelectedItem?.ToString() == "bayer";
+
+        return;
+      }
+
+      // ----- Normal video/audio mode (not GIF) -----
+      gifFps.Enabled = false;
+      gifScaleW.Enabled = false;
+      gifScaleH.Enabled = false;
+      gifCrop.Enabled = false;
+      chkPalette.Enabled = false;
+      gifDither.Enabled = false;
+      gifBayerScale.Enabled = false;
+
+      audioOnly.Enabled = true;
+
       bool audioOnlyChecked = audioOnly.Checked;
       string videoCodecSelected = videoCodec.SelectedItem?.ToString() ?? "copy";
       string audioCodecSelected = audioCodec.SelectedItem?.ToString() ?? "copy";
       bool videoBitrateSet = !string.IsNullOrWhiteSpace(videoBitrate.Text);
 
-      // Video controls
+      // ------ Video controls ------
       bool videoEnabled = !audioOnlyChecked;
       videoCodec.Enabled = videoEnabled;
 
@@ -805,10 +982,16 @@ namespace DMF
       gop.Enabled = encodingEnabled;
       videoFilter.Enabled = encodingEnabled;
 
-      // Audio controls
+      // ------ Audio controls ------
       bool audioEncoding = audioCodecSelected != "copy";
       audioBitrate.Enabled = audioEncoding;
       audioQuality.Enabled = audioEncoding;
+
+      // ------ Advanced controls ------
+      mapStreams.Enabled = true;
+      hwAccel.Enabled = true;
+
+      hwAccelOutput.Enabled = hwAccel.SelectedIndex != 0;
     }
 
     private void ForceUpdateTimeFields()
@@ -923,6 +1106,67 @@ namespace DMF
       _autoOutput = true;
     }
 
+    private List<string> BuildGifArgs()
+    {
+      var args = new List<string>();
+
+      int fps = (int)gifFps.Value;
+      int w = (int)gifScaleW.Value;
+      int h = (int)gifScaleH.Value;
+      bool usePalette = chkPalette.Checked;
+      string dither = gifDither.SelectedItem?.ToString() ?? "heckbert";
+      string crop = gifCrop.Text.Trim();
+
+      var filterParts = new List<string> { $"fps={fps}" };
+
+      if (!string.IsNullOrEmpty(crop) && crop != "w:h:x:y (0 for auto)")
+        filterParts.Add($"crop={crop}");
+
+      string scaleFilter;
+      if (w > 0 && h > 0)
+        scaleFilter = $"scale={w}:{h}";
+      else if (w > 0 && h == 0)
+        scaleFilter = $"scale={w}:-2";
+      else if (h > 0 && w == 0)
+        scaleFilter = $"scale=-2:{h}";
+      else
+        scaleFilter = "scale=200:-2";
+      filterParts.Add($"{scaleFilter}:flags=lanczos");
+
+      string filters = string.Join(",", filterParts);
+
+      if (usePalette)
+      {
+        string paletteUseOptions = "";
+        if (dither != "none")
+        {
+          paletteUseOptions = $"dither={dither}";
+          if (dither == "bayer")
+          {
+            int bayerScale = (int)gifBayerScale.Value;
+            if (bayerScale > 0)
+              paletteUseOptions += $":bayer_scale={bayerScale}";
+          }
+        }
+
+        string filterComplex =
+          $"[0:v]{filters},split [a][b];" +
+          $"[a]palettegen [p];" +
+          $"[b][p]paletteuse{(string.IsNullOrEmpty(paletteUseOptions) ? "" : "=" + paletteUseOptions)}";
+
+        args.Add($"-filter_complex \"{filterComplex}\"");
+        args.Add("-c:v gif");
+      }
+      else
+      {
+        args.Add($"-vf \"{filters}\"");
+        args.Add("-c:v gif");
+      }
+
+      args.Add("-an");
+      return args;
+    }
+
     private void BtnInput_Click(object? sender, EventArgs e)
     {
       using var file = new OpenFileDialog();
@@ -960,6 +1204,8 @@ namespace DMF
 
     private void Format_SelectedIndexChanged(object? sender, EventArgs e)
     {
+      UpdateControlStates();
+
       if (_autoOutput && !string.IsNullOrWhiteSpace(outputFile.Text) && !IsPlaceholder(outputFile, OutputPlaceholder))
       {
         string current = outputFile.Text;
@@ -973,6 +1219,14 @@ namespace DMF
           outputFile.ForeColor = SystemColors.WindowText;
         }
       }
+
+      if (format.SelectedItem?.ToString() == "gif")
+      {
+        audioOnly.Enabled = false;
+        audioOnly.Checked = false;
+      }
+      else
+        audioOnly.Enabled = true;
     }
 
     private void ChkAudioOnly_CheckedChanged(object? sender, EventArgs e)
@@ -1041,9 +1295,8 @@ namespace DMF
         }
       }
 
-      string audioCodecSelected = audioCodec.SelectedItem?.ToString() ?? "copy";
-      string videoCodecSelected = videoCodec.SelectedItem?.ToString() ?? "copy";
-      bool audioOnlyChecked = audioOnly.Checked;
+      string formatStr = format.SelectedItem?.ToString() ?? "";
+      bool isGif = formatStr.Equals("gif", StringComparison.OrdinalIgnoreCase);
 
       btnProcess.Enabled = false;
       progressBar.Visible = true;
@@ -1068,77 +1321,85 @@ namespace DMF
 
         argsList.Add($"-i \"{inputFile.Text}\"");
 
-        bool reencodeVideo = !audioOnlyChecked && videoCodecSelected != "copy";
-        if (reencodeVideo)
+        if (isGif)
         {
-          argsList.Add($"-c:v {videoCodecSelected}");
-
-          if (crf.Value > 0)
-            argsList.Add($"-crf {crf.Value}");
-
-          string presetVal = preset.SelectedItem?.ToString() ?? "medium";
-          argsList.Add($"-preset {presetVal}");
-
-          string pixFmt = pixelFormat.SelectedItem?.ToString() ?? "yuv420p";
-          argsList.Add($"-pix_fmt {pixFmt}");
-
-          if (!string.IsNullOrWhiteSpace(videoBitrate.Text))
-            argsList.Add($"-b:v {videoBitrate.Text.Trim()}");
-
-          if (!string.IsNullOrWhiteSpace(maxrate.Text))
-            argsList.Add($"-maxrate {maxrate.Text.Trim()}");
-
-          if (!string.IsNullOrWhiteSpace(bufsize.Text))
-            argsList.Add($"-bufsize {bufsize.Text.Trim()}");
-
-          string profileVal = profile.SelectedItem?.ToString() ?? "";
-          if (!string.IsNullOrEmpty(profileVal) && profileVal != "high")
-            argsList.Add($"-profile:v {profileVal}");
-
-          if (gop.Value > 0)
-            argsList.Add($"-g {gop.Value}");
-        }
-        else if (!audioOnlyChecked && videoCodecSelected == "copy")
-        {
-          argsList.Add($"-c:v {videoCodecSelected}");
-        }
-
-        if (audioCodecSelected != "copy")
-        {
-          argsList.Add($"-c:a {audioCodecSelected}");
-
-          if (!string.IsNullOrWhiteSpace(audioBitrate.Text))
-            argsList.Add($"-b:a {audioBitrate.Text.Trim()}");
-
-          if (audioQuality.Value > 0)
-            argsList.Add($"-aq {audioQuality.Value}");
+          var gifArgs = BuildGifArgs();
+          argsList.AddRange(gifArgs);
         }
         else
         {
-          argsList.Add($"-c:a {audioCodecSelected}");
-        }
+          string audioCodecSelected = audioCodec.SelectedItem?.ToString() ?? "copy";
+          string videoCodecSelected = videoCodec.SelectedItem?.ToString() ?? "copy";
+          bool audioOnlyChecked = audioOnly.Checked;
 
-        if (audioOnlyChecked)
-          argsList.Add("-vn");
+          bool reencodeVideo = !audioOnlyChecked && videoCodecSelected != "copy";
+          if (reencodeVideo)
+          {
+            argsList.Add($"-c:v {videoCodecSelected}");
 
-        if (!string.IsNullOrWhiteSpace(videoFilter.Text))
-          argsList.Add($"-vf \"{videoFilter.Text.Trim()}\"");
+            if (crf.Value > 0)
+              argsList.Add($"-crf {crf.Value}");
 
-        if (!string.IsNullOrWhiteSpace(audioFilter.Text))
-          argsList.Add($"-af \"{audioFilter.Text.Trim()}\"");
+            string presetVal = preset.SelectedItem?.ToString() ?? "medium";
+            argsList.Add($"-preset {presetVal}");
 
-        if (!string.IsNullOrWhiteSpace(mapStreams.Text))
-        {
-          argsList.Add($"-map {mapStreams.Text.Trim()}");
-        }
+            string pixFmt = pixelFormat.SelectedItem?.ToString() ?? "yuv420p";
+            argsList.Add($"-pix_fmt {pixFmt}");
 
-        string hw = hwAccel.SelectedItem?.ToString() ?? "none";
-        if (hw != "none")
-        {
-          argsList.Add($"-hwaccel {hw}");
-          string hwOut = hwAccelOutput.SelectedItem?.ToString() ?? "";
-          if (!string.IsNullOrEmpty(hwOut))
-            argsList.Add($"-hwaccel_output_format {hwOut}");
+            if (!string.IsNullOrWhiteSpace(videoBitrate.Text))
+              argsList.Add($"-b:v {videoBitrate.Text.Trim()}");
+
+            if (!string.IsNullOrWhiteSpace(maxrate.Text))
+              argsList.Add($"-maxrate {maxrate.Text.Trim()}");
+
+            if (!string.IsNullOrWhiteSpace(bufsize.Text))
+              argsList.Add($"-bufsize {bufsize.Text.Trim()}");
+
+            string profileVal = profile.SelectedItem?.ToString() ?? "";
+            if (!string.IsNullOrEmpty(profileVal) && profileVal != "high")
+              argsList.Add($"-profile:v {profileVal}");
+
+            if (gop.Value > 0)
+              argsList.Add($"-g {gop.Value}");
+          }
+          else if (!audioOnlyChecked && videoCodecSelected == "copy")
+          {
+            argsList.Add($"-c:v {videoCodecSelected}");
+          }
+
+          if (audioCodecSelected != "copy")
+          {
+            argsList.Add($"-c:a {audioCodecSelected}");
+            if (!string.IsNullOrWhiteSpace(audioBitrate.Text))
+              argsList.Add($"-b:a {audioBitrate.Text.Trim()}");
+            if (audioQuality.Value > 0)
+              argsList.Add($"-aq {audioQuality.Value}");
+          }
+          else
+          {
+            argsList.Add($"-c:a {audioCodecSelected}");
+          }
+
+          if (audioOnlyChecked)
+            argsList.Add("-vn");
+
+          if (!string.IsNullOrWhiteSpace(videoFilter.Text))
+            argsList.Add($"-vf \"{videoFilter.Text.Trim()}\"");
+
+          if (!string.IsNullOrWhiteSpace(audioFilter.Text))
+            argsList.Add($"-af \"{audioFilter.Text.Trim()}\"");
+
+          if (!string.IsNullOrWhiteSpace(mapStreams.Text))
+            argsList.Add($"-map {mapStreams.Text.Trim()}");
+
+          string hw = hwAccel.SelectedItem?.ToString() ?? "none";
+          if (hw != "none")
+          {
+            argsList.Add($"-hwaccel {hw}");
+            string hwOut = hwAccelOutput.SelectedItem?.ToString() ?? "";
+            if (!string.IsNullOrEmpty(hwOut))
+              argsList.Add($"-hwaccel_output_format {hwOut}");
+          }
         }
 
         argsList.Add($"\"{outputFile.Text}\"");
