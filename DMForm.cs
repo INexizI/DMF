@@ -55,6 +55,14 @@ namespace DMF
     private Button btnProcess = null!;
     private Label status = null!;
     private ProgressBar progressBar = null!;
+    private RectangleF cropRect = new(0f, 0f, 1f, 1f);
+    private bool isDragging = false;
+    private bool isResizing = false;
+    private Point dragStart;
+    private int resizeHandle = -1;
+    private PictureBox picPreview = null!;
+    private Button btnLoadPreview = null!;
+    private Panel previewPanel = null!;
 
     private readonly List<string> audioFormats = ["mp3", "m4a", "aac", "flac", "wav", "ogg", "opus", "ac3"];
     private readonly List<string> videoFormats = ["mp4", "avi", "mkv", "mov", "webm", "flv", "wmv", "m4v", "ts", "gif"];
@@ -110,8 +118,10 @@ namespace DMF
     [Serializable]
     public class Settings
     {
-      public int WinWidth { get; set; } = 640;
-      public int WinHeight { get; set; } = 480;
+      // public int WinWidth { get; set; } = 640;
+      // public int WinHeight { get; set; } = 480;
+      public int WinWidth { get; set; } = 1600;
+      public int WinHeight { get; set; } = 900;
       public int WinX { get; set; } = -1;
       public int WinY { get; set; } = -1;
       public bool WinMax { get; set; } = false;
@@ -173,8 +183,10 @@ namespace DMF
 
       FormBorderStyle = FormBorderStyle.FixedSingle;
       MaximizeBox = false;
-      MinimumSize = new Size(640, 480);
-      MaximumSize = new Size(640, 480);
+      // MinimumSize = new Size(640, 480);
+      // MaximumSize = new Size(640, 480);
+      MinimumSize = new Size(1600, 900);
+      MaximumSize = new Size(1600, 900);
     }
 
     private void SaveSettings()
@@ -200,9 +212,12 @@ namespace DMF
     private void InitializeForm()
     {
       Text = "DMF";
-      Size = new Size(640, 480);
-      MinimumSize = new Size(640, 480);
-      MaximumSize = new Size(640, 480);
+      // Size = new Size(640, 480);
+      // MinimumSize = new Size(640, 480);
+      // MaximumSize = new Size(640, 480);
+      Size = new Size(1600, 900);
+      MinimumSize = new Size(1600, 900);
+      MaximumSize = new Size(1600, 900);
       DoubleBuffered = true;
       FormBorderStyle = FormBorderStyle.FixedSingle;
       MaximizeBox = false;
@@ -629,10 +644,10 @@ namespace DMF
       {
         Dock = DockStyle.Fill,
         ColumnCount = 3,
-        RowCount = 6,
+        RowCount = 7,
         Padding = new Padding(10),
         AutoSize = false,
-        MaximumSize = new Size(0, 185)
+        // MaximumSize = new Size(0, 185)
       };
       for (int i = 0; i < 5; i++)
         tableGif.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -745,6 +760,187 @@ namespace DMF
       };
       tableGif.Controls.Add(gifBayerScale, 1, 5);
       tableGif.Controls.Add(new Label { Text = "0–5 (for Bayer dither)", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 5);
+
+      // Row 6: Preview
+      previewPanel = new Panel
+      {
+        Dock = DockStyle.Fill,
+        Height = 100,
+        BorderStyle = BorderStyle.FixedSingle,
+        AutoSize = false
+      };
+      tableGif.Controls.Add(previewPanel, 1, 6);
+      tableGif.SetColumnSpan(previewPanel, 2);
+
+      picPreview = new PictureBox
+      {
+        Dock = DockStyle.Fill,
+        SizeMode = PictureBoxSizeMode.Zoom,
+        BackColor = Color.Black,
+        Cursor = Cursors.Cross
+      };
+      previewPanel.Controls.Add(picPreview);
+
+      btnLoadPreview = new Button
+      {
+        Text = "Load Preview",
+        Dock = DockStyle.Bottom,
+        Height = 30,
+        Enabled = false
+      };
+      previewPanel.Controls.Add(btnLoadPreview);
+      previewPanel.Controls.SetChildIndex(btnLoadPreview, 0);
+      tableGif.Controls.Add(new Label { Text = "Preview:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 6);
+
+      picPreview.Paint += (s, e) =>
+      {
+        if (picPreview.Image == null) return;
+        var rect = GetImageRectangle();
+        if (rect.Width == 0 || rect.Height == 0) return;
+        float x = rect.X + cropRect.X * rect.Width;
+        float y = rect.Y + cropRect.Y * rect.Height;
+        float w = cropRect.Width * rect.Width;
+        float h = cropRect.Height * rect.Height;
+        using var pen = new Pen(Color.LimeGreen, 2);
+        using var brush = new SolidBrush(Color.FromArgb(64, 0, 255, 0));
+        e.Graphics.FillRectangle(brush, x, y, w, h);
+        e.Graphics.DrawRectangle(pen, x, y, w, h);
+        DrawHandle(e.Graphics, x, y);
+        DrawHandle(e.Graphics, x + w, y);
+        DrawHandle(e.Graphics, x, y + h);
+        DrawHandle(e.Graphics, x + w, y + h);
+      };
+
+      picPreview.MouseDown += (s, e) =>
+      {
+        if (picPreview.Image == null) return;
+        var rect = GetImageRectangle();
+        if (rect.Width == 0) return;
+        float normX = (e.X - rect.X) / rect.Width;
+        float normY = (e.Y - rect.Y) / rect.Height;
+        if (normX < 0 || normX > 1 || normY < 0 || normY > 1) return;
+
+        float handleSize = 8f / Math.Min(rect.Width, rect.Height);
+        float cx = cropRect.X, cy = cropRect.Y, cw = cropRect.Width, ch = cropRect.Height;
+        var handles = new (float x, float y)[] { (cx, cy), (cx + cw, cy), (cx, cy + ch), (cx + cw, cy + ch) };
+        for (int i = 0; i < 4; i++)
+        {
+          float dx = Math.Abs(normX - handles[i].x);
+          float dy = Math.Abs(normY - handles[i].y);
+          if (dx < handleSize && dy < handleSize)
+          {
+            isResizing = true;
+            resizeHandle = i;
+            return;
+          }
+        }
+        if (normX >= cx && normX <= cx + cw && normY >= cy && normY <= cy + ch)
+        {
+          isDragging = true;
+          dragStart = new Point(e.X, e.Y);
+        }
+      };
+
+      picPreview.MouseMove += (s, e) =>
+      {
+        if (!isDragging && !isResizing) return;
+        var rect = GetImageRectangle();
+        if (rect.Width == 0) return;
+        float normX = Math.Clamp((e.X - rect.X) / rect.Width, 0, 1);
+        float normY = Math.Clamp((e.Y - rect.Y) / rect.Height, 0, 1);
+
+        if (isDragging)
+        {
+          float dx = normX - cropRect.X - cropRect.Width / 2;
+          float dy = normY - cropRect.Y - cropRect.Height / 2;
+          cropRect.X = Math.Clamp(cropRect.X + dx, 0, 1 - cropRect.Width);
+          cropRect.Y = Math.Clamp(cropRect.Y + dy, 0, 1 - cropRect.Height);
+        }
+        else if (isResizing)
+        {
+          float newX = cropRect.X, newY = cropRect.Y, newW = cropRect.Width, newH = cropRect.Height;
+          switch (resizeHandle)
+          {
+            case 0: // TL
+              newX = normX; newY = normY;
+              newW = cropRect.X + cropRect.Width - normX;
+              newH = cropRect.Y + cropRect.Height - normY;
+              break;
+            case 1: // TR
+              newY = normY;
+              newW = normX - cropRect.X;
+              newH = cropRect.Y + cropRect.Height - normY;
+              break;
+            case 2: // BL
+              newX = normX;
+              newW = cropRect.X + cropRect.Width - normX;
+              newH = normY - cropRect.Y;
+              break;
+            case 3: // BR
+              newW = normX - cropRect.X;
+              newH = normY - cropRect.Y;
+              break;
+          }
+          float minSize = 0.05f;
+          if (newW < minSize) newW = minSize;
+          if (newH < minSize) newH = minSize;
+          newX = Math.Clamp(newX, 0, 1 - newW);
+          newY = Math.Clamp(newY, 0, 1 - newH);
+          cropRect = new RectangleF(newX, newY, newW, newH);
+        }
+        UpdateCropTextBox();
+        picPreview.Invalidate();
+      };
+
+      picPreview.MouseUp += (s, e) =>
+      {
+        isDragging = false;
+        isResizing = false;
+      };
+
+      btnLoadPreview.Click += async (s, e) =>
+      {
+        if (string.IsNullOrWhiteSpace(inputFile.Text) || !File.Exists(inputFile.Text))
+        {
+          MessageBox.Show("Select a valid input file first.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+          return;
+        }
+        btnLoadPreview.Enabled = false;
+        string? framePath = await ExtractPreviewFrameAsync(inputFile.Text);
+        if (framePath != null)
+        {
+          using var img = Image.FromFile(framePath);
+          picPreview.Image = new Bitmap(img);
+          File.Delete(framePath);
+          ResetCrop();
+          btnLoadPreview.Enabled = true;
+          picPreview.Invalidate();
+        }
+        else
+        {
+          MessageBox.Show("Failed to extract preview frame.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+          btnLoadPreview.Enabled = true;
+        }
+      };
+
+      gifCrop.TextChanged += (s, e) =>
+      {
+        if (picPreview.Image == null || IsPlaceholder(gifCrop, "w:h:x:y (0 for auto)")) return;
+        var parts = gifCrop.Text.Split(':');
+        if (parts.Length == 4 &&
+          int.TryParse(parts[0], out int w) &&
+          int.TryParse(parts[1], out int h) &&
+          int.TryParse(parts[2], out int x) &&
+          int.TryParse(parts[3], out int y))
+        {
+          var img = picPreview.Image;
+          if (w > 0 && h > 0 && x >= 0 && y >= 0 && x + w <= img.Width && y + h <= img.Height)
+          {
+            cropRect = new RectangleF((float)x / img.Width, (float)y / img.Height, (float)w / img.Width, (float)h / img.Height);
+            picPreview.Invalidate();
+          }
+        }
+      };
 
       var bottomPanel = new Panel
       {
@@ -911,6 +1107,49 @@ namespace DMF
       FillTimeFieldsIfEmpty();
     }
 
+    private RectangleF GetImageRectangle()
+    {
+      if (picPreview.Image == null) return RectangleF.Empty;
+      var img = picPreview.Image;
+      var client = picPreview.ClientRectangle;
+      float imgAspect = (float)img.Width / img.Height;
+      float clientAspect = (float)client.Width / client.Height;
+      float scale = Math.Min(client.Width / (float)img.Width, client.Height / (float)img.Height);
+      float w = img.Width * scale;
+      float h = img.Height * scale;
+      float x = (client.Width - w) / 2;
+      float y = (client.Height - h) / 2;
+      return new RectangleF(x, y, w, h);
+    }
+
+    private void DrawHandle(Graphics g, float x, float y)
+    {
+      float size = 6;
+      g.FillRectangle(Brushes.White, x - size / 2, y - size / 2, size, size);
+      g.DrawRectangle(Pens.Black, x - size / 2, y - size / 2, size, size);
+    }
+
+    private void UpdateCropTextBox()
+    {
+      if (gifCrop == null || picPreview.Image == null) return;
+      var img = picPreview.Image;
+      int w = (int)(cropRect.Width * img.Width);
+      int h = (int)(cropRect.Height * img.Height);
+      int x = (int)(cropRect.X * img.Width);
+      int y = (int)(cropRect.Y * img.Height);
+      gifCrop.Text = $"{w}:{h}:{x}:{y}";
+      gifCrop.ForeColor = SystemColors.WindowText;
+    }
+
+    private void ResetCrop()
+    {
+      cropRect = new RectangleF(0, 0, 1, 1);
+      if (picPreview.Image != null)
+        UpdateCropTextBox();
+      else
+        gifCrop.Text = "w:h:x:y (0 for auto)";
+    }
+
     private void UpdateControlStates()
     {
       if (inputFile == null) return;
@@ -947,6 +1186,7 @@ namespace DMF
         gifDither.Enabled = true;
         string currentDither = gifDither.SelectedItem?.ToString() ?? "";
         gifBayerScale.Enabled = gifDither.SelectedItem?.ToString() == "bayer";
+        btnLoadPreview.Enabled = true;
 
         return;
       }
@@ -959,6 +1199,7 @@ namespace DMF
       chkPalette.Enabled = false;
       gifDither.Enabled = false;
       gifBayerScale.Enabled = false;
+      btnLoadPreview.Enabled = false;
 
       audioOnly.Enabled = true;
 
@@ -1167,6 +1408,29 @@ namespace DMF
       return args;
     }
 
+    private static async Task<string?> ExtractPreviewFrameAsync(string inputPath)
+    {
+      string tempFile = Path.GetTempFileName() + ".jpg";
+      try
+      {
+        var psi = new ProcessStartInfo
+        {
+          FileName = "ffmpeg",
+          Arguments = $"-i \"{inputPath}\" -vf \"select=eq(n\\,0)\" -vframes 1 -q:v 2 \"{tempFile}\" -y",
+          UseShellExecute = false,
+          CreateNoWindow = true,
+          RedirectStandardError = true
+        };
+        using var process = Process.Start(psi);
+        if (process == null) return null;
+        await process.WaitForExitAsync();
+        if (process.ExitCode == 0 && File.Exists(tempFile))
+          return tempFile;
+        return null;
+      }
+      catch { return null; }
+    }
+
     private void BtnInput_Click(object? sender, EventArgs e)
     {
       using var file = new OpenFileDialog();
@@ -1179,6 +1443,10 @@ namespace DMF
 
         if (_autoOutput || string.IsNullOrWhiteSpace(outputFile.Text) || IsPlaceholder(outputFile, OutputPlaceholder))
           SetAutoOutput();
+
+        ResetCrop();
+        picPreview.Image = null;
+        btnLoadPreview.Enabled = true;
 
         _ = UpdateDurationAsync();
       }
