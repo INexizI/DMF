@@ -71,9 +71,9 @@ namespace DMF
     private CheckBox chkPalette = null!;
     private ComboBox gifDither = null!;
     private NumericUpDown gifBayerScale = null!;
-    private PictureBox previewPictureBox = null!;
     private Button btnUpdatePreview = null!;
     private string? previewTempFile = null;
+    private PreviewForm? _previewForm = null;
 
     private readonly Dictionary<string, string> audioCodecDescriptions = new()
     {
@@ -631,13 +631,13 @@ namespace DMF
       {
         Dock = DockStyle.Fill,
         ColumnCount = 3,
-        RowCount = 8,
+        RowCount = 7,
         Padding = new Padding(10),
         AutoSize = false
       };
       for (int i = 0; i < tableGif.RowCount; i++)
         tableGif.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-      tableGif.RowStyles[7] = new RowStyle(SizeType.Percent, 100);
+      tableGif.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
       tableGif.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
       tableGif.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
@@ -748,29 +748,18 @@ namespace DMF
       tableGif.Controls.Add(gifBayerScale, 1, 5);
       tableGif.Controls.Add(new Label { Text = "0–5 (for Bayer dither)", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 5);
 
-      // Row 6: PictureBox for Preview
-      previewPictureBox = new PictureBox
-      {
-        Dock = DockStyle.Top,
-        SizeMode = PictureBoxSizeMode.Zoom,
-        BackColor = Color.Black,
-        BorderStyle = BorderStyle.FixedSingle,
-        MinimumSize = new Size(0, 200)
-      };
-      tableGif.SetColumnSpan(previewPictureBox, 3);
-      tableGif.Controls.Add(previewPictureBox, 0, 6);
-
-      // Row 7: Button update
-      tableGif.Controls.Add(new Label { Text = "Preview:", TextAlign = ContentAlignment.BottomRight, Dock = DockStyle.Top }, 0, 7);
+      // Row 6: Preview button
+      tableGif.Controls.Add(new Label { Text = "Preview:", TextAlign = ContentAlignment.BottomRight, Dock = DockStyle.Top }, 0, 6);
       var previewPanel = new FlowLayoutPanel
       {
         Dock = DockStyle.Fill,
         FlowDirection = FlowDirection.LeftToRight,
         WrapContents = false
       };
-      btnUpdatePreview = new Button { Text = "Update", AutoSize = true };
+      btnUpdatePreview = new Button { Text = "Open Preview", AutoSize = true };
       previewPanel.Controls.Add(btnUpdatePreview);
-      tableGif.Controls.Add(previewPanel, 1, 7);
+      tableGif.Controls.Add(previewPanel, 1, 6);
+      tableGif.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 6);
 
       btnUpdatePreview.Click += BtnUpdatePreview_Click;
 
@@ -973,10 +962,8 @@ namespace DMF
         gifCrop.Enabled = true;
         chkPalette.Enabled = true;
         gifDither.Enabled = true;
-        _ = gifDither.SelectedItem?.ToString() ?? "";
         gifBayerScale.Enabled = gifDither.SelectedItem?.ToString() == "bayer";
         btnUpdatePreview.Enabled = true;
-        previewPictureBox.Visible = true;
 
         return;
       }
@@ -990,7 +977,6 @@ namespace DMF
       gifDither.Enabled = false;
       gifBayerScale.Enabled = false;
       btnUpdatePreview.Enabled = false;
-      previewPictureBox.Visible = false;
 
       audioOnly.Enabled = true;
 
@@ -1022,7 +1008,6 @@ namespace DMF
       // ------ Advanced controls ------
       mapStreams.Enabled = true;
       hwAccel.Enabled = true;
-
       hwAccelOutput.Enabled = hwAccel.SelectedIndex != 0;
     }
 
@@ -1303,11 +1288,21 @@ namespace DMF
 
         using var img = Image.FromFile(tempFile);
         var bitmap = new Bitmap(img);
-
         DrawCropRectangle(bitmap);
 
-        previewPictureBox.Image?.Dispose();
-        previewPictureBox.Image = bitmap;
+        if (_previewForm == null || _previewForm.IsDisposed)
+        {
+          _previewForm = new PreviewForm { Owner = this };
+          _previewForm.FormClosed += (s, args) =>
+           {
+             btnUpdatePreview.Text = "Open Preview";
+             _previewForm = null;
+           };
+          btnUpdatePreview.Text = "Update Preview";
+        }
+        _previewForm.UpdateImage(bitmap);
+        _previewForm.Show();
+        _previewForm.BringToFront();
 
         status.Text = "Preview updated";
       }
@@ -1592,6 +1587,11 @@ namespace DMF
       if (!string.IsNullOrEmpty(previewTempFile) && File.Exists(previewTempFile))
       {
         try { File.Delete(previewTempFile); } catch { }
+      }
+
+      if (_previewForm != null && !_previewForm.IsDisposed)
+      {
+        _previewForm.Close();
       }
 
       SaveSettings();
