@@ -998,7 +998,7 @@ namespace DMF
       bufsize.Enabled = encodingEnabled && videoBitrateSet;
       profile.Enabled = encodingEnabled;
       gop.Enabled = encodingEnabled;
-      videoFilter.Enabled = encodingEnabled;
+      videoFilter.Enabled = videoEnabled;
 
       // ------ Audio controls ------
       bool audioEncoding = audioCodecSelected != "copy";
@@ -1448,6 +1448,10 @@ namespace DMF
           string videoCodecSelected = videoCodec.SelectedItem?.ToString() ?? "copy";
           bool audioOnlyChecked = audioOnly.Checked;
 
+          bool hasVideoFilter = !string.IsNullOrWhiteSpace(videoFilter.Text);
+
+          if (hasVideoFilter && videoCodecSelected == "copy")
+            videoCodecSelected = "libx264";
           bool reencodeVideo = !audioOnlyChecked && videoCodecSelected != "copy";
           if (reencodeVideo)
           {
