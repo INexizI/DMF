@@ -119,6 +119,8 @@ namespace DMF
       public int WinY { get; set; } = -1;
       public bool WinMax { get; set; } = false;
       public bool OpenOnSuccess { get; set; } = true;
+      public string? FfmpegPath { get; set; } = null;
+      public string? FfprobePath { get; set; } = null;
     }
 
     public DMForm()
@@ -132,6 +134,131 @@ namespace DMF
       SetPlaceholders();
       UpdateTimeFields();
       UpdateCodecHints();
+
+      if (!CheckFFmpeg())
+      {
+        status.Text = "FFmpeg not found";
+        btnProcess.Enabled = false;
+      }
+    }
+
+    private static bool IsExecutableAvailable(string path, string arguments)
+    {
+      try
+      {
+        var procInfo = new ProcessStartInfo
+        {
+          FileName = path,
+          Arguments = arguments,
+          UseShellExecute = false,
+          RedirectStandardOutput = true,
+          CreateNoWindow = true
+        };
+        using var p = Process.Start(procInfo);
+        if (p == null) return false;
+        p.WaitForExit(2000);
+        return p.ExitCode == 0;
+      }
+      catch { return false; }
+    }
+
+    private bool CheckFFmpeg()
+    {
+      string ffmpegPath = settings.FfmpegPath ?? "ffmpeg";
+      if (!IsExecutableAvailable(ffmpegPath, "-version"))
+      {
+        var result = MessageBox.Show(
+          "FFmpeg not found.\n\n" +
+          "Would you like to specify the path to ffmpeg.exe?",
+          "Missing FFmpeg",
+          MessageBoxButtons.YesNo,
+          MessageBoxIcon.Warning);
+
+        if (result == DialogResult.Yes)
+        {
+          using var dialog = new OpenFileDialog
+          {
+            Title = "Select ffmpeg.exe",
+            Filter = "Executable|ffmpeg.exe|All files|*.*"
+          };
+          if (dialog.ShowDialog() == DialogResult.OK)
+          {
+            settings.FfmpegPath = dialog.FileName;
+            string dir = Path.GetDirectoryName(dialog.FileName)!;
+            string probePath = Path.Combine(dir, "ffprobe.exe");
+            if (File.Exists(probePath))
+              settings.FfprobePath = probePath;
+            else
+            {
+              var probeResult = MessageBox.Show(
+                "ffprobe.exe not found in the same folder.\n" +
+                "Do you want to specify its location manually?",
+                "ffprobe missing",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning);
+              if (probeResult == DialogResult.Yes)
+              {
+                using var probeDialog = new OpenFileDialog
+                {
+                  Title = "Select ffprobe.exe",
+                  Filter = "Executable|ffprobe.exe|All files|*.*"
+                };
+                if (probeDialog.ShowDialog() == DialogResult.OK)
+                  settings.FfprobePath = probeDialog.FileName;
+              }
+            }
+            SaveSettings();
+            return true;
+          }
+          else
+          {
+            var download = MessageBox.Show(
+              "FFmpeg is required to run this application.\n" +
+              "Do you want to open the download page?",
+              "Download FFmpeg",
+              MessageBoxButtons.YesNo,
+              MessageBoxIcon.Information);
+            if (download == DialogResult.Yes)
+            {
+              Process.Start(new ProcessStartInfo("https://ffmpeg.org/download.html") { UseShellExecute = true });
+            }
+            return false;
+          }
+        }
+        else
+          return false;
+      }
+
+      string ffprobePath = settings.FfprobePath ?? "ffprobe";
+      if (!IsExecutableAvailable(ffprobePath, "-version"))
+      {
+        var result = MessageBox.Show(
+          "ffprobe not found.\n\n" +
+          "Would you like to specify the path to ffprobe.exe?",
+          "Missing ffprobe",
+          MessageBoxButtons.YesNo,
+          MessageBoxIcon.Warning);
+        if (result == DialogResult.Yes)
+        {
+          using var dialog = new OpenFileDialog
+          {
+            Title = "Select ffprobe.exe",
+            Filter = "Executable|ffprobe.exe|All files|*.*"
+          };
+          if (dialog.ShowDialog() == DialogResult.OK)
+          {
+            settings.FfprobePath = dialog.FileName;
+            SaveSettings();
+            return true;
+          }
+          else
+            return false;
+        }
+        else
+          return false;
+      }
+
+      return true;
     }
 
     private static string GetAppDataFolder()
@@ -1395,6 +1522,12 @@ namespace DMF
       if (string.IsNullOrWhiteSpace(outputFile.Text) || IsPlaceholder(outputFile, OutputPlaceholder))
       {
         MessageBox.Show("Please select an output file.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        return;
+      }
+
+      if (!CheckFFmpeg())
+      {
+        MessageBox.Show("FFmpeg is not available. Please install it or specify the path.", "FFmpeg Missing", MessageBoxButtons.OK, MessageBoxIcon.Error);
         return;
       }
 
