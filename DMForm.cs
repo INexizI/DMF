@@ -14,7 +14,7 @@ namespace DMF
   {
     /* Application Settings */
     private Settings settings = new();
-    private readonly string settingsFile = "settings.json";
+    private readonly string settingsFile;
     /* UI Controls */
     // Basic
     private TextBox inputFile = null!;
@@ -123,6 +123,7 @@ namespace DMF
 
     public DMForm()
     {
+      settingsFile = Path.Combine(GetAppDataFolder(), "settings.json");
       LoadSettings();
       InitializeForm();
       InitializeLayout();
@@ -131,6 +132,14 @@ namespace DMF
       SetPlaceholders();
       UpdateTimeFields();
       UpdateCodecHints();
+    }
+
+    private static string GetAppDataFolder()
+    {
+      string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+      string appFolder = Path.Combine(localAppData, "DMF");
+      if (!Directory.Exists(appFolder)) Directory.CreateDirectory(appFolder);
+      return appFolder;
     }
 
     private void LoadSettings()
