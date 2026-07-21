@@ -209,6 +209,9 @@ namespace DMF
       DoubleBuffered = true;
       FormBorderStyle = FormBorderStyle.FixedSingle;
       MaximizeBox = false;
+
+      try { this.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); }
+      catch { /* ... */ }
     }
 
     private void InitializeLayout()
@@ -300,29 +303,8 @@ namespace DMF
       tableBasic.Controls.Add(endTime, 1, 5);
       tableBasic.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 5);
 
-      // Row 6: Audio codec
-      tableBasic.Controls.Add(new Label { Text = "Audio codec:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 6);
-      audioCodec = new ComboBox
-      {
-        Dock = DockStyle.Fill,
-        DropDownStyle = ComboBoxStyle.DropDownList,
-        Items = { "copy", "aac", "libfdk_aac", "mp3", "libmp3lame", "ac3", "flac", "opus", "libvorbis", "pcm_s16le", "wav" },
-        SelectedIndex = 0
-      };
-      audioCodec.SelectedIndexChanged += (s, e) => UpdateCodecHints();
-      tableBasic.Controls.Add(audioCodec, 1, 6);
-      audioCodecHint = new Label
-      {
-        Dock = DockStyle.Fill,
-        TextAlign = ContentAlignment.MiddleLeft,
-        ForeColor = Color.LightYellow,
-        Font = new Font("Segoe UI", 8, FontStyle.Italic),
-        AutoSize = false
-      };
-      tableBasic.Controls.Add(audioCodecHint, 2, 6);
-
-      // Row 7: Video codec
-      tableBasic.Controls.Add(new Label { Text = "Video codec:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 7);
+      // Row 6: Video codec
+      tableBasic.Controls.Add(new Label { Text = "Video codec:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 6);
       videoCodec = new ComboBox
       {
         Dock = DockStyle.Fill,
@@ -332,7 +314,7 @@ namespace DMF
         SelectedIndex = 0
       };
       videoCodec.SelectedIndexChanged += (s, e) => UpdateCodecHints();
-      tableBasic.Controls.Add(videoCodec, 1, 7);
+      tableBasic.Controls.Add(videoCodec, 1, 6);
       videoCodecHint = new Label
       {
         Dock = DockStyle.Fill,
@@ -341,7 +323,28 @@ namespace DMF
         Font = new Font("Segoe UI", 8, FontStyle.Italic),
         AutoSize = false
       };
-      tableBasic.Controls.Add(videoCodecHint, 2, 7);
+      tableBasic.Controls.Add(videoCodecHint, 2, 6);
+
+      // Row 7: Audio codec
+      tableBasic.Controls.Add(new Label { Text = "Audio codec:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 7);
+      audioCodec = new ComboBox
+      {
+        Dock = DockStyle.Fill,
+        DropDownStyle = ComboBoxStyle.DropDownList,
+        Items = { "copy", "aac", "libfdk_aac", "mp3", "libmp3lame", "ac3", "flac", "opus", "libvorbis", "pcm_s16le", "wav" },
+        SelectedIndex = 0
+      };
+      audioCodec.SelectedIndexChanged += (s, e) => UpdateCodecHints();
+      tableBasic.Controls.Add(audioCodec, 1, 7);
+      audioCodecHint = new Label
+      {
+        Dock = DockStyle.Fill,
+        TextAlign = ContentAlignment.MiddleLeft,
+        ForeColor = Color.LightYellow,
+        Font = new Font("Segoe UI", 8, FontStyle.Italic),
+        AutoSize = false
+      };
+      tableBasic.Controls.Add(audioCodecHint, 2, 7);
 
       // Row 8: Checkboxes
       tableBasic.Controls.Add(new Label { Dock = DockStyle.Fill }, 0, 8);

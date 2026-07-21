@@ -15,6 +15,9 @@ namespace DMF
       MinimumSize = new Size(320, 240);
       StartPosition = FormStartPosition.CenterParent;
 
+      try { this.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); }
+      catch { /* ... */ }
+
       pictureBox = new PictureBox
       {
         Dock = DockStyle.Fill,
@@ -26,9 +29,7 @@ namespace DMF
 
     public void UpdateImage(Image image)
     {
-      if (pictureBox.Image != null)
-        pictureBox.Image.Dispose();
-
+      pictureBox.Image?.Dispose();
       pictureBox.Image = image;
     }
   }
