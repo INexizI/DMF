@@ -991,6 +991,7 @@ namespace DMF
       btnUpdatePreview.Enabled = false;
 
       audioOnly.Enabled = true;
+      audioCodec.Enabled = true;
 
       bool audioOnlyChecked = audioOnly.Checked;
       string videoCodecSelected = videoCodec.SelectedItem?.ToString() ?? "copy";
@@ -1143,7 +1144,7 @@ namespace DMF
       int w = (int)gifScaleW.Value;
       int h = (int)gifScaleH.Value;
       bool usePalette = chkPalette.Checked;
-      string dither = gifDither.SelectedItem?.ToString() ?? "heckbert";
+      string dither = gifDither.SelectedItem?.ToString() ?? "floyd_steinberg";
       string crop = gifCrop.Text.Trim();
 
       var filterParts = new List<string> { $"fps={fps}" };
@@ -1180,7 +1181,7 @@ namespace DMF
 
         string filterComplex =
           $"[0:v]{filters},split [a][b];" +
-          $"[a]palettegen [p];" +
+          $"[a]palettegen=stats_mode=full [p];" +
           $"[b][p]paletteuse{(string.IsNullOrEmpty(paletteUseOptions) ? "" : "=" + paletteUseOptions)}";
 
         args.Add($"-filter_complex \"{filterComplex}\"");
