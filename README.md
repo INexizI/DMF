@@ -1,90 +1,123 @@
-# DMF - Desktop Media Form
+# DMF – Desktop Media Formatter
 
-A lightweight Windows Forms GUI for **FFmpeg** that simplifies trimming and transcoding of media files.
+[![.NET](https://img.shields.io/badge/.NET-10.0-blue)](https://dotnet.microsoft.com/)
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/INexizI/DMF)](https://github.com/INexizI/DMF/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-## Features
+**DMF** – это легковесное Windows Forms GUI для **FFmpeg**, которое упрощает обрезку, перекодирование и создание GIF-анимаций из медиафайлов.
 
-- **Trim videos** by selecting:
-  - No trimming (full file)
-  - Duration (start + duration)
-  - End time (start + end timestamp)
-- **Choose audio and video codecs** - default is `copy` (no re-encoding, lossless and fastest).
-- **FFmpeg arguments are correctly ordered** (`-ss` and `-t`/`-to` **before** `-i`) to avoid black-frame issues and ensure accurate seeking.
-- **Persistent window settings** - remembers size, position, and maximised state.
-- **Asynchronous processing** - UI stays responsive while FFmpeg runs.
-- **Clean and simple interface** - built with .NET Windows Forms.
+---
 
-## Why `copy`?
+## ✨ Основные возможности
 
-- **`copy`** tells FFmpeg to copy the audio/video streams **without re-encoding**.
-- This is **lossless** (no quality loss) and **extremely fast** - ideal for trimming, cutting, or remuxing.
-- Only use other codecs if you need to change the format or compress the file.
+- **Обрезка видео/аудио** по временному диапазону (Start / End) или без обрезки.
+- **Выбор аудио- и видеокодеков** – по умолчанию `copy` (без перекодирования, максимальная скорость и сохранение качества).
+- **Поддержка GIF-анимаций** с настройками:
+  - Частота кадров (FPS)
+  - Масштабирование (размер, автоподбор пропорций)
+  - Кадрирование (Crop) с наглядным предпросмотром
+  - Палитра и дизеринг (Bayer, Heckbert, Floyd-Steinberg и др.)
+  - Отдельное окно предпросмотра с отображением области кадрирования
+- **Фильтры** (видео/аудио) – можно применять даже при выборе кодека `copy` (при этом автоматически включается перекодирование).
+- **Сохранение настроек** в папке пользователя `%LOCALAPPDATA%\DMF` – не засоряет папку с программой.
+- **Одновременная поддержка форматов** – более 10 видеоформатов и 8 аудиоформатов.
+- **Асинхронная обработка** – интерфейс не зависает во время работы FFmpeg.
+- **Готовый к публикации** – однофайловый `.exe` для Windows x64.
 
-## Prerequisites
+---
 
-- [.NET SDK 6.0 or later](https://dotnet.microsoft.com/en-us/download) (to build and run)
-- [FFmpeg](https://ffmpeg.org/download.html) installed and accessible in your `PATH` (or you can modify the code to use a full path).
+## 📋 Необходимые компоненты
 
-## Installation
+- **[FFmpeg](https://ffmpeg.org/download.html)** (и `ffprobe`) должны быть установлены и доступны в `PATH` (или вы можете указать полный путь в коде).
+- Для запуска **релизной версии** – ничего больше не нужно (все зависимости уже внутри).
+- Для сборки из исходников – [.NET SDK 10.0](https://dotnet.microsoft.com/en-us/download) или новее.
 
-1. Clone this repository:
-   ```bash
-   git clone https://github.com/INexizI/DMF.git
-   ```
-2. Build the project:
+---
 
-   ```bash
-   cd DMF
-   dotnet build
-   ```
+## 🚀 Установка и запуск
 
-3. Run the application:
-   ```bash
-   dotnet run
-   ```
+### Вариант 1 – Скачать готовый релиз
 
-Or open the solution in Visual Studio and build/run from there.
+1. Перейдите на [страницу релизов](https://github.com/INexizI/DMF/releases).
+2. Скачайте архив `DMF-<версия>-win-x64.zip`.
+3. Распакуйте архив и запустите `DMF.exe`.
 
-## Usage
+> **Примечание:** при первом запуске программа создаст папку `%LOCALAPPDATA%\DMF` для хранения настроек.
 
-- Select an input media file (click Browse...).
-
-- Choose an output file (click Browse...).
-
-- Set the trim mode:
-  - Source - process the entire file.
-
-  - Duration - specify a start time and a duration.
-
-  - End time - specify a start time and an end time.
-
-- Select audio and video codecs - the default is copy for both (fastest, lossless). Change only if you need to re-encode.
-
-- Click Run FFmpeg.
-
-- The progress bar will show activity; a message box will confirm success or show errors.
-
-For detailed usage and examples, see the [user guide](doc/usage.md)
-
-## Building from Source
+### Вариант 2 – Собрать из исходников
 
 ```bash
-dotnet restore
-dotnet build --configuration Release
+git clone https://github.com/INexizI/DMF.git
+cd DMF
+dotnet build -c Release
 ```
 
-The executable will be in bin/Release/net6.0-windows/ (or your target framework).
+Готовый .exe появится в папке bin\Release\net10.0-windows\win-x64\publish\ (если запускали публикацию) или в стандартной папке сборки.
 
-## Contributing
+---
 
-Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
+## 🧑‍💻 Использование
 
-## License
+**1. Выберите входной файл** – кнопка «Browse...» рядом с полем Input.
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+**2. Укажите выходной файл** – автоматически подставится имя в папку Загрузки, или выберите свой путь.
 
-## Acknowledgements
+**3. Настройте параметры:**
 
-FFmpeg - the backbone of this tool.
+- Вкладка Basic – формат, обрезка (Range / Source), аудио- и видеокодеки, чекбоксы (Audio only, Overwrite, Open folder on success).
 
-.NET and Windows Forms teams for the platform.
+- Вкладка Video – параметры кодирования (CRF, пресет, битрейт, профиль, GOP).
+
+- Вкладка Audio – битрейт и качество (VBR).
+
+- Вкладка Filters – произвольные видео- и аудиофильтры (например, scale=1280:-2, crop=..., volume=2).
+
+- Вкладка Advanced – сопоставление потоков, аппаратное ускорение.
+
+- Вкладка GIF – настройки для создания GIF (доступна только при выборе формата gif).
+
+**4. Нажмите «Run FFmpeg»** – начнётся обработка.
+
+---
+
+## 📽️ Предпросмотр для GIF
+
+- Во вкладке GIF нажмите **«Open Preview»** – откроется отдельное окно с первым кадром видео.
+
+- На кадр будет наложена красная рамка, показывающая область кадрирования (если она задана).
+
+- При изменении настроек нажмите **«Update Preview»** – кадр обновится с учётом новых параметров.
+
+---
+
+## 🛠️ Сборка из исходников
+
+**Требования для разработки**
+
+- [.NET SDK 10.0](https://dotnet.microsoft.com/en-us/download) (или более новая версия)
+
+- Git (опционально, для клонирования)
+
+Команды
+
+```bash
+# Восстановление зависимостей
+dotnet restore
+
+# Сборка в режиме Debug
+dotnet build
+
+# Сборка в режиме Release
+dotnet build -c Release
+
+# Публикация однофайлового self-contained EXE
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o ./Publish
+```
+
+---
+
+## 📄 Лицензия
+
+Проект распространяется под лицензией MIT. Подробности в файле [LICENSE](LICENSE).
+
+---
