@@ -1185,8 +1185,6 @@ namespace DMF
       mapStreams.Enabled = true;
       hwAccel.Enabled = true;
       hwAccelOutput.Enabled = hwAccel.SelectedIndex != 0;
-
-      TryAutoDetectFormat();
     }
 
     private void ForceUpdateTimeFields()
