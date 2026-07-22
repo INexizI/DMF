@@ -74,6 +74,7 @@ namespace DMF
     private Button btnUpdatePreview = null!;
     private string? previewTempFile = null;
     private PreviewForm? _previewForm = null;
+    private bool _updatingFormatFromPath = false;
 
     private readonly Dictionary<string, string> audioCodecDescriptions = new()
     {
@@ -395,6 +396,7 @@ namespace DMF
       outputFile.GotFocus += (s, e) => RemovePlaceholder(outputFile, OutputPlaceholder);
       outputFile.LostFocus += (s, e) => RestorePlaceholder(outputFile, OutputPlaceholder);
       tableBasic.Controls.Add(outputFile, 1, 1);
+      outputFile.TextChanged += OutputFile_TextChanged;
       btnOutput = new Button { Text = "Browse...", Dock = DockStyle.Fill };
       tableBasic.Controls.Add(btnOutput, 2, 1);
 
@@ -1012,6 +1014,40 @@ namespace DMF
 
     private static bool IsPlaceholder(TextBox tb, string placeholder) => tb.Text == placeholder;
 
+    private void OutputFile_TextChanged(object? sender, EventArgs e)
+    {
+      if (format == null) return;
+      if (_updatingFormatFromPath) return;
+      string path = outputFile.Text;
+      if (string.IsNullOrWhiteSpace(path) || IsPlaceholder(outputFile, OutputPlaceholder))
+        return;
+      string extension = Path.GetExtension(path);
+      if (string.IsNullOrEmpty(extension))
+        return;
+      extension = extension.TrimStart('.').ToLowerInvariant();
+      if (string.IsNullOrEmpty(extension))
+        return;
+
+      List<string> formatList = audioOnly.Checked ? audioFormats : videoFormats;
+      int index = formatList.FindIndex(f => f.Equals(extension, StringComparison.OrdinalIgnoreCase));
+      if (index >= 0)
+      {
+        _updatingFormatFromPath = true;
+        try
+        {
+          for (int i = 0; i < format.Items.Count; i++)
+          {
+            if (format.Items[i].ToString()?.Equals(extension, StringComparison.OrdinalIgnoreCase) == true)
+            {
+              format.SelectedIndex = i;
+              break;
+            }
+          }
+        }
+        finally { _updatingFormatFromPath = false; }
+      }
+    }
+
     private void UpdateCodecHints()
     {
       if (audioCodecHint != null && audioCodec != null)
@@ -1069,7 +1105,7 @@ namespace DMF
 
     private void UpdateControlStates()
     {
-      if (inputFile == null) return;
+      if (inputFile == null || format == null) return;
 
       bool isGif = format.SelectedItem?.ToString() == "gif";
 
@@ -1149,6 +1185,8 @@ namespace DMF
       mapStreams.Enabled = true;
       hwAccel.Enabled = true;
       hwAccelOutput.Enabled = hwAccel.SelectedIndex != 0;
+
+      TryAutoDetectFormat();
     }
 
     private void ForceUpdateTimeFields()
@@ -1460,9 +1498,11 @@ namespace DMF
 
     private void Format_SelectedIndexChanged(object? sender, EventArgs e)
     {
+      if (format == null) return;
+
       UpdateControlStates();
 
-      if (_autoOutput && !string.IsNullOrWhiteSpace(outputFile.Text) && !IsPlaceholder(outputFile, OutputPlaceholder))
+      if (_autoOutput && !_updatingFormatFromPath && !string.IsNullOrWhiteSpace(outputFile.Text) && !IsPlaceholder(outputFile, OutputPlaceholder))
       {
         string current = outputFile.Text;
         string? dir = Path.GetDirectoryName(current);
@@ -1485,8 +1525,11 @@ namespace DMF
         audioOnly.Enabled = true;
     }
 
+    private void TryAutoDetectFormat() => OutputFile_TextChanged(this, EventArgs.Empty);
+
     private void ChkAudioOnly_CheckedChanged(object? sender, EventArgs e)
     {
+      if (format == null) return;
       bool audioOnlyChecked = audioOnly.Checked;
       string currentFormat = format.SelectedItem?.ToString() ?? "";
 
@@ -1510,6 +1553,7 @@ namespace DMF
 
     private async void BtnProcess_Click(object? sender, EventArgs e)
     {
+      if (format == null) return;
       if (string.IsNullOrWhiteSpace(inputFile.Text) || IsPlaceholder(inputFile, InputPlaceholder) || !File.Exists(inputFile.Text))
       {
         MessageBox.Show("Please select a valid input file.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
