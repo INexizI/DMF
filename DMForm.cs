@@ -381,7 +381,11 @@ namespace DMF
       // Row 0: Input
       tableBasic.Controls.Add(new Label { Text = "Input:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 0);
       inputFile = new TextBox { Dock = DockStyle.Fill };
-      inputFile.TextChanged += (s, e) => UpdateProcessButton();
+      inputFile.TextChanged += (s, e) =>
+      {
+        UpdateProcessButton();
+        UpdateControlStates();
+      };
       inputFile.GotFocus += (s, e) => RemovePlaceholder(inputFile, InputPlaceholder);
       inputFile.LostFocus += (s, e) => RestorePlaceholder(inputFile, InputPlaceholder);
       inputFile.Leave += async (s, e) => await UpdateDurationAsync();
@@ -772,7 +776,7 @@ namespace DMF
       {
         Dock = DockStyle.Fill,
         ColumnCount = 3,
-        RowCount = 7,
+        RowCount = 6,
         Padding = new Padding(10),
         AutoSize = false
       };
@@ -813,7 +817,7 @@ namespace DMF
       scalePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 30));
       scalePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35));
 
-      gifScaleW = new NumericUpDown { Minimum = 0, Maximum = 4096, Value = 200, Increment = 10, Dock = DockStyle.Fill };
+      gifScaleW = new NumericUpDown { Minimum = 0, Maximum = 4096, Value = 0, Increment = 10, Dock = DockStyle.Fill };
       gifScaleH = new NumericUpDown { Minimum = 0, Maximum = 4096, Value = 0, Increment = 10, Dock = DockStyle.Fill };
 
       scalePanel.Controls.Add(new Label { Text = "W:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 0);
@@ -876,7 +880,7 @@ namespace DMF
       tableGif.Controls.Add(new Label { Text = "dithering algorithm", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 4);
 
       // Row 5: Bayer scale
-      tableGif.Controls.Add(new Label { Text = "Bayer scale:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 5);
+      tableGif.Controls.Add(new Label { Text = "Bayer scale:", TextAlign = ContentAlignment.BottomRight, Dock = DockStyle.Top }, 0, 5);
       gifBayerScale = new NumericUpDown
       {
         Dock = DockStyle.Fill,
@@ -887,22 +891,7 @@ namespace DMF
         Enabled = false
       };
       tableGif.Controls.Add(gifBayerScale, 1, 5);
-      tableGif.Controls.Add(new Label { Text = "0–5 (for Bayer dither)", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 5);
-
-      // Row 6: Preview button
-      tableGif.Controls.Add(new Label { Text = "Preview:", TextAlign = ContentAlignment.BottomRight, Dock = DockStyle.Top }, 0, 6);
-      var previewPanel = new FlowLayoutPanel
-      {
-        Dock = DockStyle.Fill,
-        FlowDirection = FlowDirection.LeftToRight,
-        WrapContents = false
-      };
-      btnUpdatePreview = new Button { Text = "Open Preview", AutoSize = true };
-      previewPanel.Controls.Add(btnUpdatePreview);
-      tableGif.Controls.Add(previewPanel, 1, 6);
-      tableGif.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 6);
-
-      btnUpdatePreview.Click += BtnUpdatePreview_Click;
+      tableGif.Controls.Add(new Label { Text = "0–5 (for Bayer dither)", TextAlign = ContentAlignment.BottomLeft, Dock = DockStyle.Top, ForeColor = Color.Gray }, 2, 5);
 
       var bottomPanel = new Panel
       {
@@ -936,11 +925,12 @@ namespace DMF
       var actionPanel = new TableLayoutPanel
       {
         Dock = DockStyle.Fill,
-        ColumnCount = 2,
+        ColumnCount = 3,
         RowCount = 1,
         Padding = new Padding(0)
       };
       actionPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
+      actionPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
       actionPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
       bottomLayout.Controls.Add(actionPanel, 0, 1);
 
@@ -962,9 +952,20 @@ namespace DMF
       };
       actionPanel.Controls.Add(status, 1, 0);
 
+      btnUpdatePreview = new Button
+      {
+        Text = "Open Preview",
+        AutoSize = true,
+        Dock = DockStyle.Fill,
+        BackColor = Color.LightSkyBlue,
+        Enabled = false
+      };
+      actionPanel.Controls.Add(btnUpdatePreview, 2, 0);
+
       btnInput.Click += BtnInput_Click;
       btnOutput.Click += BtnOutput_Click;
       btnProcess.Click += BtnProcess_Click;
+      btnUpdatePreview.Click += BtnUpdatePreview_Click;
       format.SelectedIndexChanged += Format_SelectedIndexChanged;
       audioOnly.CheckedChanged += ChkAudioOnly_CheckedChanged;
 
@@ -1138,12 +1139,11 @@ namespace DMF
         chkPalette.Enabled = true;
         gifDither.Enabled = true;
         gifBayerScale.Enabled = gifDither.SelectedItem?.ToString() == "bayer";
-        btnUpdatePreview.Enabled = true;
 
         return;
       }
 
-      // ----- Normal video/audio mode (not GIF) -----
+      // ----- Normal video/audio mode -----
       gifFps.Enabled = false;
       gifScaleW.Enabled = false;
       gifScaleH.Enabled = false;
@@ -1151,7 +1151,6 @@ namespace DMF
       chkPalette.Enabled = false;
       gifDither.Enabled = false;
       gifBayerScale.Enabled = false;
-      btnUpdatePreview.Enabled = false;
 
       audioOnly.Enabled = true;
       audioCodec.Enabled = true;
@@ -1185,6 +1184,13 @@ namespace DMF
       mapStreams.Enabled = true;
       hwAccel.Enabled = true;
       hwAccelOutput.Enabled = hwAccel.SelectedIndex != 0;
+
+      // ------ Preview controls ------
+      bool previewEnabled = !audioOnly.Checked &&
+                            !string.IsNullOrWhiteSpace(inputFile.Text) &&
+                            !IsPlaceholder(inputFile, InputPlaceholder) &&
+                            File.Exists(inputFile.Text);
+      btnUpdatePreview.Enabled = previewEnabled;
     }
 
     private void ForceUpdateTimeFields()
@@ -1323,7 +1329,7 @@ namespace DMF
       else if (h > 0 && w == 0)
         scaleFilter = $"scale=-2:{h}";
       else
-        scaleFilter = "scale=200:-2";
+        scaleFilter = "scale=-2:-2";
       filterParts.Add($"{scaleFilter}:flags=lanczos");
 
       string filters = string.Join(",", filterParts);
@@ -1360,20 +1366,142 @@ namespace DMF
       return args;
     }
 
+    private string BuildPreviewArgs(string inputFile, string tempFile)
+    {
+      var args = new List<string>();
+
+      if (trimMode.SelectedItem?.ToString() == "Range" && !IsPlaceholder(startTime, TimePlaceholder))
+      {
+        if (TimeSpan.TryParse(startTime.Text, out var startTs) && startTs.TotalSeconds > 0)
+          args.Add($"-ss {startTs:hh\\:mm\\:ss}");
+      }
+
+      args.Add($"-i \"{inputFile}\"");
+
+      var filterParts = new List<string>();
+      bool isGif = format.SelectedItem?.ToString() == "gif";
+
+      if (isGif)
+      {
+        int fps = (int)gifFps.Value;
+        int w = (int)gifScaleW.Value;
+        int h = (int)gifScaleH.Value;
+
+        filterParts.Add($"fps={fps}");
+
+        string scaleFilter;
+        if (w > 0 && h > 0)
+          scaleFilter = $"scale={w}:{h}";
+        else if (w > 0 && h == 0)
+          scaleFilter = $"scale={w}:-2";
+        else if (h > 0 && w == 0)
+          scaleFilter = $"scale=-2:{h}";
+        else
+          scaleFilter = "scale=-2:-2";
+        filterParts.Add($"{scaleFilter}:flags=lanczos");
+      }
+      else
+      {
+        string vf = videoFilter.Text.Trim();
+        if (!string.IsNullOrEmpty(vf))
+        {
+          var parts = vf.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+          var filtered = new List<string>();
+          foreach (var part in parts)
+          {
+            if (!part.StartsWith("crop", StringComparison.OrdinalIgnoreCase))
+              filtered.Add(part);
+          }
+          if (filtered.Count > 0)
+            filterParts.Add(string.Join(",", filtered));
+        }
+      }
+
+      if (filterParts.Count > 0)
+      {
+        string filters = string.Join(",", filterParts);
+        args.Add($"-vf \"{filters}\"");
+      }
+
+      args.Add("-vframes 1");
+      args.Add("-f image2");
+      args.Add("-vcodec png");
+      args.Add($"\"{tempFile}\"");
+
+      return string.Join(" ", args);
+    }
+
+    private (int w, int h, int? x, int? y)? ParseCropFromFilter(string filter)
+    {
+      if (string.IsNullOrWhiteSpace(filter)) return null;
+
+      var match = CropFilter().Match(filter);
+      if (match.Success)
+      {
+        int w = int.Parse(match.Groups["w"].Value);
+        int h = int.Parse(match.Groups["h"].Value);
+        int? x = match.Groups["x"].Success ? int.Parse(match.Groups["x"].Value) : null;
+        int? y = match.Groups["y"].Success ? int.Parse(match.Groups["y"].Value) : null;
+        return (w, h, x, y);
+      }
+      return null;
+    }
+
     private void DrawCropRectangle(Bitmap bitmap)
     {
       if (bitmap == null) return;
 
-      string cropText = gifCrop.Text.Trim();
-      if (string.IsNullOrEmpty(cropText) || cropText == "w:h:x:y (0 for auto)")
-        return;
+      int? cropW = null, cropH = null;
+      int? cropX = null, cropY = null;
+      bool isGif = format.SelectedItem?.ToString() == "gif";
 
-      var parts = cropText.Split(':', StringSplitOptions.RemoveEmptyEntries);
-      if (parts.Length != 4) return;
+      if (isGif)
+      {
+        string cropText = gifCrop.Text.Trim();
+        if (!string.IsNullOrEmpty(cropText) && cropText != "w:h:x:y (0 for auto)")
+        {
+          var parts = cropText.Split(':', StringSplitOptions.RemoveEmptyEntries);
+          if (parts.Length >= 2 && parts.Length <= 4 &&
+            int.TryParse(parts[0], out int parsedW) &&
+            int.TryParse(parts[1], out int parsedH))
+          {
+            cropW = parsedW;
+            cropH = parsedH;
+            if (parts.Length >= 3 && int.TryParse(parts[2], out int parsedX))
+              cropX = parsedX;
+            if (parts.Length >= 4 && int.TryParse(parts[3], out int parsedY))
+              cropY = parsedY;
+          }
+        }
+      }
+      else
+      {
+        var parsed = ParseCropFromFilter(videoFilter.Text);
+        if (parsed.HasValue)
+        {
+          cropW = parsed.Value.w;
+          cropH = parsed.Value.h;
+          cropX = parsed.Value.x;
+          cropY = parsed.Value.y;
+        }
+      }
 
-      if (!int.TryParse(parts[0], out int w) || !int.TryParse(parts[1], out int h) ||
-          !int.TryParse(parts[2], out int x) || !int.TryParse(parts[3], out int y))
-        return;
+      if (!cropW.HasValue) return;
+
+      int w = cropW.Value;
+      int h = cropH.Value;
+      int x, y;
+
+      if (!cropX.HasValue || !cropY.HasValue)
+      {
+        x = (bitmap.Width - w) / 2;
+        y = (bitmap.Height - h) / 2;
+      }
+      else
+      {
+        x = cropX.Value;
+        y = cropY.Value;
+      }
 
       if (w == 0) w = bitmap.Width - x;
       if (h == 0) h = bitmap.Height - y;
@@ -1386,11 +1514,74 @@ namespace DMF
 
       using var g = Graphics.FromImage(bitmap);
       g.DrawRectangle(new Pen(Color.Red, 3), x, y, w, h);
+    }
 
-      string label = $"Crop: {w}x{h} (X={x}, Y={y})";
-      using var font = new Font("Segoe UI", 12, FontStyle.Bold);
-      using var brush = new SolidBrush(Color.Yellow);
-      g.DrawString(label, font, brush, 10, 10);
+    private string GetCropInfo(Bitmap bitmap)
+    {
+      if (bitmap == null) return "";
+
+      int? cropW = null, cropH = null;
+      int? cropX = null, cropY = null;
+      bool isGif = format.SelectedItem?.ToString() == "gif";
+
+      if (isGif)
+      {
+        string cropText = gifCrop.Text.Trim();
+        if (!string.IsNullOrEmpty(cropText) && cropText != "w:h:x:y (0 for auto)")
+        {
+          var parts = cropText.Split(':', StringSplitOptions.RemoveEmptyEntries);
+          if (parts.Length >= 2 && parts.Length <= 4 &&
+            int.TryParse(parts[0], out int parsedW) &&
+            int.TryParse(parts[1], out int parsedH))
+          {
+            cropW = parsedW;
+            cropH = parsedH;
+            if (parts.Length >= 3 && int.TryParse(parts[2], out int parsedX))
+              cropX = parsedX;
+            if (parts.Length >= 4 && int.TryParse(parts[3], out int parsedY))
+              cropY = parsedY;
+          }
+        }
+      }
+      else
+      {
+        var parsed = ParseCropFromFilter(videoFilter.Text);
+        if (parsed.HasValue)
+        {
+          cropW = parsed.Value.w;
+          cropH = parsed.Value.h;
+          cropX = parsed.Value.x;
+          cropY = parsed.Value.y;
+        }
+      }
+
+      if (!cropW.HasValue) return "";
+
+      int w = cropW.Value;
+      int h = cropH.Value;
+      int x, y;
+
+      if (!cropX.HasValue || !cropY.HasValue)
+      {
+        x = (bitmap.Width - w) / 2;
+        y = (bitmap.Height - h) / 2;
+      }
+      else
+      {
+        x = cropX.Value;
+        y = cropY.Value;
+      }
+
+      if (w == 0) w = bitmap.Width - x;
+      if (h == 0) h = bitmap.Height - y;
+      if (x < 0) x = 0;
+      if (y < 0) y = 0;
+
+      w = Math.Min(w, bitmap.Width - x);
+      h = Math.Min(h, bitmap.Height - y);
+      if (w <= 0 || h <= 0) return "";
+
+      return $"crop: {w}x{h} (X={x}, Y={y})";
     }
 
     private void BtnInput_Click(object? sender, EventArgs e)
@@ -1407,6 +1598,7 @@ namespace DMF
           SetAutoOutput();
 
         _ = UpdateDurationAsync();
+        UpdateControlStates();
       }
     }
 
@@ -1436,12 +1628,6 @@ namespace DMF
         return;
       }
 
-      if (format.SelectedItem?.ToString() != "gif")
-      {
-        MessageBox.Show("Preview only for GIF.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        return;
-      }
-
       btnUpdatePreview.Enabled = false;
       status.Text = "Load frame...";
       progressBar.Visible = true;
@@ -1452,19 +1638,13 @@ namespace DMF
         string tempFile = Path.GetTempFileName() + ".png";
         previewTempFile = tempFile;
 
-        string startArg = "";
-        if (trimMode.SelectedItem?.ToString() == "Range" && !IsPlaceholder(startTime, TimePlaceholder))
-        {
-          if (TimeSpan.TryParse(startTime.Text, out var startTs) && startTs.TotalSeconds > 0)
-            startArg = $"-ss {startTs:hh\\:mm\\:ss}";
-        }
-
-        string ffmpegArgs = $"-i \"{inputFile.Text}\" {startArg} -vframes 1 -f image2 -vcodec png \"{tempFile}\"";
+        string ffmpegArgs = BuildPreviewArgs(inputFile.Text, tempFile);
         await Task.Run(() => RunFFmpeg("ffmpeg", ffmpegArgs));
 
         using var img = Image.FromFile(tempFile);
         var bitmap = new Bitmap(img);
         DrawCropRectangle(bitmap);
+        string cropInfo = GetCropInfo(bitmap);
 
         if (_previewForm == null || _previewForm.IsDisposed)
         {
@@ -1476,7 +1656,7 @@ namespace DMF
            };
           btnUpdatePreview.Text = "Update Preview";
         }
-        _previewForm.UpdateImage(bitmap);
+        _previewForm.UpdateImage(bitmap, cropInfo);
         _previewForm.Show();
         _previewForm.BringToFront();
 
@@ -1498,6 +1678,28 @@ namespace DMF
     {
       if (format == null) return;
 
+      bool isGif = format.SelectedItem?.ToString() == "gif";
+
+      if (isGif)
+      {
+        if (!string.IsNullOrWhiteSpace(videoFilter.Text))
+          videoFilter.Text = "";
+        if (!string.IsNullOrWhiteSpace(audioFilter.Text))
+          audioFilter.Text = "";
+      }
+      else
+      {
+        gifCrop.Text = "w:h:x:y (0 for auto)";
+        gifCrop.ForeColor = Color.Gray;
+        gifFps.Value = 30;
+        gifScaleW.Value = 200;
+        gifScaleH.Value = 0;
+        chkPalette.Checked = true;
+        gifDither.SelectedIndex = 0;
+        gifBayerScale.Value = 5;
+        gifBayerScale.Enabled = false;
+      }
+
       UpdateControlStates();
 
       if (_autoOutput && !_updatingFormatFromPath && !string.IsNullOrWhiteSpace(outputFile.Text) && !IsPlaceholder(outputFile, OutputPlaceholder))
@@ -1514,13 +1716,18 @@ namespace DMF
         }
       }
 
-      if (format.SelectedItem?.ToString() == "gif")
+      if (isGif)
       {
         audioOnly.Enabled = false;
         audioOnly.Checked = false;
       }
       else
         audioOnly.Enabled = true;
+
+      if (_previewForm != null && !_previewForm.IsDisposed && _previewForm.Visible)
+      {
+        BtnUpdatePreview_Click(sender, e);
+      }
     }
 
     private void TryAutoDetectFormat() => OutputFile_TextChanged(this, EventArgs.Empty);
@@ -1789,5 +1996,10 @@ namespace DMF
       SaveSettings();
       base.OnFormClosing(e);
     }
+
+    [System.Text.RegularExpressions.GeneratedRegex(
+      @"crop\s*=\s*(?<w>\d+)\s*:\s*(?<h>\d+)(?:\s*:\s*(?<x>\d+)\s*:\s*(?<y>\d+))?",
+      System.Text.RegularExpressions.RegexOptions.IgnoreCase, "en-US")]
+    private static partial System.Text.RegularExpressions.Regex CropFilter();
   }
 }
