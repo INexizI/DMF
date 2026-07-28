@@ -1586,7 +1586,7 @@ namespace DMF
       return string.Join(" ", args);
     }
 
-    private (int w, int h, int? x, int? y)? ParseCropFromFilter(string filter)
+    private static (int w, int h, int? x, int? y)? ParseCropFromFilter(string filter)
     {
       if (string.IsNullOrWhiteSpace(filter)) return null;
 
@@ -1880,9 +1880,7 @@ namespace DMF
         audioOnly.Enabled = true;
 
       if (_previewForm != null && !_previewForm.IsDisposed && _previewForm.Visible)
-      {
         BtnUpdatePreview_Click(sender, e);
-      }
     }
 
     private void TryAutoDetectFormat() => OutputFile_TextChanged(this, EventArgs.Empty);
@@ -2209,8 +2207,7 @@ namespace DMF
 
     private void OpenFolder(string path)
     {
-      if (string.IsNullOrWhiteSpace(path))
-        return;
+      if (string.IsNullOrWhiteSpace(path)) return;
 
       try
       {
@@ -2232,13 +2229,12 @@ namespace DMF
     {
       if (!string.IsNullOrEmpty(previewTempFile) && File.Exists(previewTempFile))
       {
-        try { File.Delete(previewTempFile); } catch { }
+        try { File.Delete(previewTempFile); }
+        catch { /* ... */ }
       }
 
       if (_previewForm != null && !_previewForm.IsDisposed)
-      {
         _previewForm.Close();
-      }
 
       SaveSettings();
       base.OnFormClosing(e);
@@ -2251,13 +2247,13 @@ namespace DMF
     [System.Text.RegularExpressions.GeneratedRegex(@"time=(\d{2}:\d{2}:\d{2}\.\d+)")]
     private static partial System.Text.RegularExpressions.Regex ProcessTime();
 
-    private Version GetCurrentVersion()
+    private static Version GetCurrentVersion()
     {
       var assembly = Assembly.GetEntryAssembly();
       var versionAttr = assembly?.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>();
       var versionString = versionAttr?.InformationalVersion ?? "0.0.0";
       var idx = versionString.IndexOf('+');
-      if (idx > 0) versionString = versionString.Substring(0, idx);
+      if (idx > 0) versionString = versionString[..idx];
       if (Version.TryParse(versionString, out var version))
         return version;
       return new Version(0, 0, 0);
