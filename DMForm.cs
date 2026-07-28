@@ -4,6 +4,8 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
+using System.Net.Http;
+using System.Reflection;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -15,6 +17,27 @@ namespace DMF
     /* Application Settings */
     private Settings settings = new();
     private readonly string settingsFile;
+    /* Application paths and folders */
+    private readonly string UpdateCacheFile = Path.Combine(GetAppDataFolder(), "update_cache.json");
+    /* UI placeholders and defaults */
+    private const string InputPlaceholder = "Select input file...";
+    private const string OutputPlaceholder = "Select output file...";
+    private const string TimePlaceholder = "HH:MM:SS";
+    /* Supported formats */
+    private readonly List<string> audioFormats = ["mp3", "m4a", "aac", "flac", "wav", "ogg", "opus", "ac3"];
+    private readonly List<string> videoFormats = ["mp4", "avi", "mkv", "mov", "webm", "flv", "wmv", "m4v", "ts", "gif"];
+    /* GitHub update settings */
+    private const string GithubOwner = "INexizI";
+    private const string GithubRepo = "DMF";
+    private const string GithubReleasesUrl = $"https://api.github.com/repos/{GithubOwner}/{GithubRepo}/releases/latest";
+    private const int UpdateCheckIntervalHours = 1;
+    /* Application constants */
+    private const string FfmpegExecutable = "ffmpeg";
+    private const string FfprobeExecutable = "ffprobe";
+    private const string ExplorerExecutable = "explorer.exe";
+    private const string FfmpegDownloadUrl = "https://ffmpeg.org/download.html";
+    private const int ProcessCheckTimeoutMs = 2000;
+    private const int WindowEdgeOffset = 50;
     /* UI Controls */
     // Basic
     private TextBox inputFile = null!;
@@ -56,13 +79,7 @@ namespace DMF
     private Button btnCancel = null!;
     private Label status = null!;
     private ProgressBar progressBar = null!;
-
-    private readonly List<string> audioFormats = ["mp3", "m4a", "aac", "flac", "wav", "ogg", "opus", "ac3"];
-    private readonly List<string> videoFormats = ["mp4", "avi", "mkv", "mov", "webm", "flv", "wmv", "m4v", "ts", "gif"];
     private bool _autoOutput = false;
-    private const string InputPlaceholder = "Select input file...";
-    private const string OutputPlaceholder = "Select output file...";
-    private const string TimePlaceholder = "HH:MM:SS";
     private ToolTip toolTip = new ToolTip();
     private double inputDuration = 0;
     private NumericUpDown gifFps = null!;
@@ -126,6 +143,13 @@ namespace DMF
       public string? FfprobePath { get; set; } = null;
     }
 
+    private class UpdateCache
+    {
+      public DateTime LastCheckTime { get; set; } = DateTime.MinValue;
+      public string? ETag { get; set; }
+      public string? LatestVersion { get; set; }
+    }
+
     public DMForm()
     {
       settingsFile = Path.Combine(GetAppDataFolder(), "settings.json");
@@ -138,11 +162,101 @@ namespace DMF
       UpdateTimeFields();
       UpdateCodecHints();
 
+      this.Shown += async (s, e) => await CheckForUpdatesAsync();
+
       if (!CheckFFmpeg())
       {
         status.Text = "FFmpeg not found";
         btnProcess.Enabled = false;
       }
+    }
+
+    private async Task CheckForUpdatesAsync()
+    {
+      try
+      {
+        var cache = LoadUpdateCache();
+
+        if ((DateTime.Now - cache.LastCheckTime).TotalHours < UpdateCheckIntervalHours)
+        {
+          Debug.WriteLine($"Update check skipped: last check was at {cache.LastCheckTime}");
+          return;
+        }
+
+        using var client = new HttpClient();
+        client.DefaultRequestHeaders.Add("User-Agent", "DMF-UpdateChecker");
+        if (!string.IsNullOrEmpty(cache.ETag))
+          client.DefaultRequestHeaders.Add("If-None-Match", cache.ETag);
+
+        var response = await client.GetAsync(GithubReleasesUrl);
+
+        if (response.StatusCode == System.Net.HttpStatusCode.NotModified)
+        {
+          if (response.Headers.ETag != null)
+            cache.ETag = response.Headers.ETag.Tag?.Trim('"');
+          cache.LastCheckTime = DateTime.Now;
+          SaveUpdateCache(cache);
+          Debug.WriteLine("Update check: no new version (304)");
+          return;
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+          Debug.WriteLine($"Update check failed: {response.StatusCode}");
+          return;
+        }
+
+        var jsonString = await response.Content.ReadAsStringAsync();
+        var json = JsonDocument.Parse(jsonString);
+        var tagName = json.RootElement.GetProperty("tag_name").GetString();
+        if (string.IsNullOrEmpty(tagName)) return;
+
+        if (tagName.StartsWith('v')) tagName = tagName[1..];
+        var latestVersion = new Version(tagName);
+        var currentVersion = GetCurrentVersion();
+
+        if (response.Headers.ETag != null)
+          cache.ETag = response.Headers.ETag.Tag?.Trim('"');
+        cache.LastCheckTime = DateTime.Now;
+        cache.LatestVersion = tagName;
+        SaveUpdateCache(cache);
+
+        if (latestVersion > currentVersion)
+        {
+          var result = MessageBox.Show(
+            $"New version {latestVersion} available (current: {currentVersion})\n\nDo you want to download it?",
+            "Update Available",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Information);
+          if (result == DialogResult.Yes)
+            Process.Start(new ProcessStartInfo($"https://github.com/{GithubOwner}/{GithubRepo}/releases/latest") { UseShellExecute = true });
+        }
+      }
+      catch (Exception ex) { Debug.WriteLine($"Update check failed: {ex.Message}"); }
+    }
+
+    private UpdateCache LoadUpdateCache()
+    {
+      try
+      {
+        if (File.Exists(UpdateCacheFile))
+        {
+          string json = File.ReadAllText(UpdateCacheFile);
+          return JsonSerializer.Deserialize<UpdateCache>(json) ?? new UpdateCache();
+        }
+      }
+      catch { /* ... */ }
+      return new UpdateCache();
+    }
+
+    private void SaveUpdateCache(UpdateCache cache)
+    {
+      try
+      {
+        string json = JsonSerializer.Serialize(cache, new JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllText(UpdateCacheFile, json);
+      }
+      catch (Exception ex) { Debug.WriteLine($"Failed to save update cache: {ex.Message}"); }
     }
 
     private static bool IsExecutableAvailable(string path, string arguments)
@@ -159,7 +273,7 @@ namespace DMF
         };
         using var p = Process.Start(procInfo);
         if (p == null) return false;
-        p.WaitForExit(2000);
+        p.WaitForExit(ProcessCheckTimeoutMs);
         return p.ExitCode == 0;
       }
       catch { return false; }
@@ -167,7 +281,7 @@ namespace DMF
 
     private bool CheckFFmpeg()
     {
-      string ffmpegPath = settings.FfmpegPath ?? "ffmpeg";
+      string ffmpegPath = settings.FfmpegPath ?? FfmpegExecutable;
       if (!IsExecutableAvailable(ffmpegPath, "-version"))
       {
         var result = MessageBox.Show(
@@ -222,9 +336,7 @@ namespace DMF
               MessageBoxButtons.YesNo,
               MessageBoxIcon.Information);
             if (download == DialogResult.Yes)
-            {
-              Process.Start(new ProcessStartInfo("https://ffmpeg.org/download.html") { UseShellExecute = true });
-            }
+              Process.Start(new ProcessStartInfo(FfmpegDownloadUrl) { UseShellExecute = true });
             return false;
           }
         }
@@ -232,7 +344,7 @@ namespace DMF
           return false;
       }
 
-      string ffprobePath = settings.FfprobePath ?? "ffprobe";
+      string ffprobePath = settings.FfprobePath ?? FfprobeExecutable;
       if (!IsExecutableAvailable(ffprobePath, "-version"))
       {
         var result = MessageBox.Show(
@@ -303,8 +415,8 @@ namespace DMF
         {
           var workingArea = screen.WorkingArea;
           if (settings.WinX >= 0 && settings.WinY >= 0 &&
-            settings.WinX < workingArea.Width - 50 &&
-            settings.WinY < workingArea.Height - 50)
+            settings.WinX < workingArea.Width - WindowEdgeOffset &&
+            settings.WinY < workingArea.Height - WindowEdgeOffset)
             Location = new Point(settings.WinX, settings.WinY);
           else
             StartPosition = FormStartPosition.CenterScreen;
@@ -1282,7 +1394,7 @@ namespace DMF
       {
         var psi = new ProcessStartInfo
         {
-          FileName = "ffprobe",
+          FileName = FfprobeExecutable,
           Arguments = $"-v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 \"{filePath}\"",
           UseShellExecute = false,
           RedirectStandardOutput = true,
@@ -1682,7 +1794,7 @@ namespace DMF
         previewTempFile = tempFile;
 
         string ffmpegArgs = BuildPreviewArgs(inputFile.Text, tempFile);
-        await RunFFmpeg("ffmpeg", ffmpegArgs, CancellationToken.None, 0, null);
+        await RunFFmpeg(FfmpegExecutable, ffmpegArgs, CancellationToken.None, 0, null);
 
         using var img = Image.FromFile(tempFile);
         var bitmap = new Bitmap(img);
@@ -1866,7 +1978,7 @@ namespace DMF
 
       try
       {
-        string ffmpegPath = "ffmpeg";
+        string ffmpegPath = FfmpegExecutable;
         var argsList = new List<string>();
 
         if (overwrite.Checked)
@@ -2094,6 +2206,7 @@ namespace DMF
         throw new Exception($"FFmpeg exited with code {process.ExitCode}. Error: {error}");
       }
     }
+
     private void OpenFolder(string path)
     {
       if (string.IsNullOrWhiteSpace(path))
@@ -2102,12 +2215,12 @@ namespace DMF
       try
       {
         if (File.Exists(path))
-          Process.Start("explorer.exe", $"/select, \"{path}\"");
+          Process.Start(ExplorerExecutable, $"/select, \"{path}\"");
         else
         {
           string? directory = Path.GetDirectoryName(path);
           if (!string.IsNullOrEmpty(directory) && Directory.Exists(directory))
-            Process.Start("explorer.exe", directory);
+            Process.Start(ExplorerExecutable, directory);
           else
             MessageBox.Show("Could not open folder.", "Information", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
@@ -2137,5 +2250,17 @@ namespace DMF
     private static partial System.Text.RegularExpressions.Regex CropFilter();
     [System.Text.RegularExpressions.GeneratedRegex(@"time=(\d{2}:\d{2}:\d{2}\.\d+)")]
     private static partial System.Text.RegularExpressions.Regex ProcessTime();
+
+    private Version GetCurrentVersion()
+    {
+      var assembly = Assembly.GetEntryAssembly();
+      var versionAttr = assembly?.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>();
+      var versionString = versionAttr?.InformationalVersion ?? "0.0.0";
+      var idx = versionString.IndexOf('+');
+      if (idx > 0) versionString = versionString.Substring(0, idx);
+      if (Version.TryParse(versionString, out var version))
+        return version;
+      return new Version(0, 0, 0);
+    }
   }
 }
