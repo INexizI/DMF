@@ -1682,7 +1682,7 @@ namespace DMF
         previewTempFile = tempFile;
 
         string ffmpegArgs = BuildPreviewArgs(inputFile.Text, tempFile);
-        await RunFFmpeg("ffmpeg", ffmpegArgs, CancellationToken.None);
+        await RunFFmpeg("ffmpeg", ffmpegArgs, CancellationToken.None, 0, null);
 
         using var img = Image.FromFile(tempFile);
         var bitmap = new Bitmap(img);
@@ -1861,6 +1861,7 @@ namespace DMF
       btnProcess.Enabled = false;
       progressBar.Visible = true;
       progressBar.Style = ProgressBarStyle.Marquee;
+      progressBar.Value = 0;
       status.Text = "Processing...";
 
       try
@@ -1970,7 +1971,18 @@ namespace DMF
 
         string args = string.Join(" ", argsList);
 
-        await RunFFmpeg(ffmpegPath, args, token);
+        await RunFFmpeg(ffmpegPath, args, token, inputDuration, (percent, _) =>
+        {
+          BeginInvoke(() =>
+          {
+            if (percent > 0)
+            {
+              progressBar.Style = ProgressBarStyle.Continuous;
+              progressBar.Value = Math.Min(percent, 100);
+              status.Text = $"Processing... {percent}%";
+            }
+          });
+        });
 
         status.Text = "Done!";
         MessageBox.Show("Processing completed successfully!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -2002,6 +2014,8 @@ namespace DMF
         btnCancel.Visible = false;
         btnCancel.Enabled = false;
         btnProcess.Enabled = true;
+        progressBar.Style = ProgressBarStyle.Marquee;
+        progressBar.Value = 0;
         progressBar.Visible = false;
         UpdateProcessButton();
       }
@@ -2013,7 +2027,7 @@ namespace DMF
       btnCancel.Enabled = false;
     }
 
-    private static async Task RunFFmpeg(string path, string args, CancellationToken cancellationToken)
+    private static async Task RunFFmpeg(string path, string args, CancellationToken cancellationToken, double totalDuration, Action<int, TimeSpan>? progressCallback = null)
     {
       using var process = new Process();
       process.StartInfo.FileName = path;
@@ -2025,13 +2039,39 @@ namespace DMF
 
       process.Start();
 
-      var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
-      var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+      _ = process.StandardOutput.ReadToEndAsync();
 
-      try
+      var errorTask = Task.Run(async () =>
       {
-        while (!process.HasExited) { await Task.Delay(100, cancellationToken); }
-      }
+        try
+        {
+          while (true)
+          {
+            string? line = await process.StandardError.ReadLineAsync(cancellationToken);
+            if (line == null) break;
+
+            if (line.Contains("time="))
+            {
+              var match = ProcessTime().Match(line);
+              if (match.Success && TimeSpan.TryParse(match.Groups[1].Value, out var currentTime))
+              {
+                int progressPercent = 0;
+                TimeSpan remaining = TimeSpan.Zero;
+                if (totalDuration > 0)
+                {
+                  double percent = currentTime.TotalSeconds / totalDuration * 100;
+                  progressPercent = (int)Math.Min(percent, 100);
+                  remaining = TimeSpan.FromSeconds(Math.Max(totalDuration - currentTime.TotalSeconds, 0));
+                }
+                progressCallback?.Invoke(progressPercent, remaining);
+              }
+            }
+          }
+        }
+        catch (OperationCanceledException) { /* ... */ }
+      });
+
+      try { await process.WaitForExitAsync(cancellationToken); }
       catch (OperationCanceledException)
       {
         if (!process.HasExited)
@@ -2041,17 +2081,19 @@ namespace DMF
             process.Kill();
             await process.WaitForExitAsync(cancellationToken);
           }
-          catch (Exception ex) { Console.WriteLine($"Error killing process: {ex.Message}"); }
+          catch (Exception ex) { Debug.WriteLine($"Error killing process: {ex.Message}"); }
         }
         throw new OperationCanceledException("Encoding cancelled.");
       }
 
-      await Task.WhenAll(errorTask, outputTask);
+      await errorTask;
 
       if (process.ExitCode != 0)
-        throw new Exception($"FFmpeg exited with code {process.ExitCode}. Error: {errorTask.Result}");
+      {
+        string error = await process.StandardError.ReadToEndAsync();
+        throw new Exception($"FFmpeg exited with code {process.ExitCode}. Error: {error}");
+      }
     }
-
     private void OpenFolder(string path)
     {
       if (string.IsNullOrWhiteSpace(path))
@@ -2093,5 +2135,7 @@ namespace DMF
       @"crop\s*=\s*(?<w>\d+)\s*:\s*(?<h>\d+)(?:\s*:\s*(?<x>\d+)\s*:\s*(?<y>\d+))?",
       System.Text.RegularExpressions.RegexOptions.IgnoreCase, "en-US")]
     private static partial System.Text.RegularExpressions.Regex CropFilter();
+    [System.Text.RegularExpressions.GeneratedRegex(@"time=(\d{2}:\d{2}:\d{2}\.\d+)")]
+    private static partial System.Text.RegularExpressions.Regex ProcessTime();
   }
 }
