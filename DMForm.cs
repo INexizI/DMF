@@ -53,6 +53,7 @@ namespace DMF
     private ComboBox hwAccelOutput = null!;
     // Common
     private Button btnProcess = null!;
+    private Button btnCancel = null!;
     private Label status = null!;
     private ProgressBar progressBar = null!;
 
@@ -75,6 +76,7 @@ namespace DMF
     private string? previewTempFile = null;
     private PreviewForm? _previewForm = null;
     private bool _updatingFormatFromPath = false;
+    private CancellationTokenSource? _cancellationTokenSource;
 
     private readonly Dictionary<string, string> audioCodecDescriptions = new()
     {
@@ -947,6 +949,17 @@ namespace DMF
       };
       actionPanel.Controls.Add(btnProcess, 0, 0);
 
+      btnCancel = new Button
+      {
+        Text = "Cancel",
+        Dock = DockStyle.Fill,
+        BackColor = Color.LightCoral,
+        Enabled = false,
+        Visible = false
+      };
+      btnCancel.Click += BtnCancel_Click;
+      actionPanel.Controls.Add(btnCancel, 0, 0);
+
       status = new Label
       {
         Text = "Ready",
@@ -1669,7 +1682,7 @@ namespace DMF
         previewTempFile = tempFile;
 
         string ffmpegArgs = BuildPreviewArgs(inputFile.Text, tempFile);
-        await Task.Run(() => RunFFmpeg("ffmpeg", ffmpegArgs));
+        await RunFFmpeg("ffmpeg", ffmpegArgs, CancellationToken.None);
 
         using var img = Image.FromFile(tempFile);
         var bitmap = new Bitmap(img);
@@ -1839,6 +1852,12 @@ namespace DMF
       string formatStr = format.SelectedItem?.ToString() ?? "";
       bool isGif = formatStr.Equals("gif", StringComparison.OrdinalIgnoreCase);
 
+      _cancellationTokenSource = new CancellationTokenSource();
+      var token = _cancellationTokenSource.Token;
+
+      btnProcess.Visible = false;
+      btnCancel.Visible = true;
+      btnCancel.Enabled = true;
       btnProcess.Enabled = false;
       progressBar.Visible = true;
       progressBar.Style = ProgressBarStyle.Marquee;
@@ -1951,13 +1970,24 @@ namespace DMF
 
         string args = string.Join(" ", argsList);
 
-        await Task.Run(() => RunFFmpeg(ffmpegPath, args));
+        await RunFFmpeg(ffmpegPath, args, token);
 
         status.Text = "Done!";
         MessageBox.Show("Processing completed successfully!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
         if (openOnSuccess.Checked)
           OpenFolder(outputFile.Text);
+      }
+      catch (OperationCanceledException)
+      {
+        status.Text = "Cancelled";
+        MessageBox.Show("Encoding cancelled.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+        if (!string.IsNullOrWhiteSpace(outputFile.Text) && File.Exists(outputFile.Text))
+        {
+          try { File.Delete(outputFile.Text); }
+          catch (Exception ex) { Debug.WriteLine($"Failed to delete incomplete file: {ex.Message}"); }
+        }
       }
       catch (Exception ex)
       {
@@ -1966,13 +1996,24 @@ namespace DMF
       }
       finally
       {
+        _cancellationTokenSource?.Dispose();
+        _cancellationTokenSource = null;
+        btnProcess.Visible = true;
+        btnCancel.Visible = false;
+        btnCancel.Enabled = false;
         btnProcess.Enabled = true;
         progressBar.Visible = false;
         UpdateProcessButton();
       }
     }
 
-    private static void RunFFmpeg(string path, string args)
+    private void BtnCancel_Click(object? sender, EventArgs e)
+    {
+      _cancellationTokenSource?.Cancel();
+      btnCancel.Enabled = false;
+    }
+
+    private static async Task RunFFmpeg(string path, string args, CancellationToken cancellationToken)
     {
       using var process = new Process();
       process.StartInfo.FileName = path;
@@ -1983,11 +2024,32 @@ namespace DMF
       process.StartInfo.CreateNoWindow = true;
 
       process.Start();
-      string error = process.StandardError.ReadToEnd();
-      process.WaitForExit();
+
+      var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
+      var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+
+      try
+      {
+        while (!process.HasExited) { await Task.Delay(100, cancellationToken); }
+      }
+      catch (OperationCanceledException)
+      {
+        if (!process.HasExited)
+        {
+          try
+          {
+            process.Kill();
+            await process.WaitForExitAsync(cancellationToken);
+          }
+          catch (Exception ex) { Console.WriteLine($"Error killing process: {ex.Message}"); }
+        }
+        throw new OperationCanceledException("Encoding cancelled.");
+      }
+
+      await Task.WhenAll(errorTask, outputTask);
 
       if (process.ExitCode != 0)
-        throw new Exception($"FFmpeg exited with code {process.ExitCode}. Error: {error}");
+        throw new Exception($"FFmpeg exited with code {process.ExitCode}. Error: {errorTask.Result}");
     }
 
     private void OpenFolder(string path)
