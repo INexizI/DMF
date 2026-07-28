@@ -347,6 +347,10 @@ namespace DMF
       FormBorderStyle = FormBorderStyle.FixedSingle;
       MaximizeBox = false;
 
+      this.AllowDrop = true;
+      this.DragEnter += DMForm_DragEnter;
+      this.DragDrop += DMForm_DragDrop;
+
       try { this.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); }
       catch { /* ... */ }
     }
@@ -975,6 +979,32 @@ namespace DMF
       crf.ValueChanged += (s, e) => UpdateControlStates();
 
       UpdateTimeFields();
+      UpdateControlStates();
+    }
+
+    private void DMForm_DragEnter(object? sender, DragEventArgs e)
+    {
+      if (e.Data?.GetDataPresent(DataFormats.FileDrop) == true)
+        e.Effect = DragDropEffects.Copy;
+      else
+        e.Effect = DragDropEffects.None;
+    }
+
+    private void DMForm_DragDrop(object? sender, DragEventArgs e)
+    {
+      if (e.Data?.GetData(DataFormats.FileDrop) is not string[] files || files.Length == 0)
+        return;
+
+      string file = files[0];
+      if (!File.Exists(file)) return;
+
+      inputFile.Text = file;
+      inputFile.ForeColor = SystemColors.WindowText;
+
+      if (_autoOutput || string.IsNullOrWhiteSpace(outputFile.Text) || IsPlaceholder(outputFile, OutputPlaceholder))
+        SetAutoOutput();
+
+      _ = UpdateDurationAsync();
       UpdateControlStates();
     }
 
