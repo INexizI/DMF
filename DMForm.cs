@@ -38,6 +38,12 @@ namespace DMF
     private const string FfmpegDownloadUrl = "https://ffmpeg.org/download.html";
     private const int ProcessCheckTimeoutMs = 2000;
     private const int WindowEdgeOffset = 50;
+    /* Presets */
+    private const string PresetWeb = "Web";
+    private const string PresetHD = "HD";
+    private const string PresetMobile = "Mobile";
+    private const string PresetLossless = "Lossless";
+    private const string PresetGif = "GIF";
     /* UI Controls */
     // Basic
     private TextBox inputFile = null!;
@@ -624,6 +630,72 @@ namespace DMF
       tableBasic.Controls.Add(checkPanel, 1, 8);
       tableBasic.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 8);
 
+      var tabPresets = new TabPage("Presets");
+      tabControl.TabPages.Add(tabPresets);
+      var tablePresets = new TableLayoutPanel
+      {
+        Dock = DockStyle.Fill,
+        ColumnCount = 2,
+        RowCount = 4,
+        Padding = new Padding(10),
+        AutoSize = false
+      };
+      tablePresets.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
+      tablePresets.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+      tablePresets.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+      tablePresets.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
+      tablePresets.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+      tabPresets.Controls.Add(tablePresets);
+
+      // Row 0: Presets
+      tablePresets.Controls.Add(new Label { Text = "Preset:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 0);
+      var presetCombo = new ComboBox
+      {
+        Dock = DockStyle.Fill,
+        DropDownStyle = ComboBoxStyle.DropDownList,
+        Items = { PresetWeb, PresetHD, PresetMobile, PresetLossless, PresetGif },
+        SelectedIndex = 0
+      };
+      tablePresets.Controls.Add(presetCombo, 1, 0);
+
+      // Row 1: Discription
+      tablePresets.Controls.Add(new Label { Text = "Description:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 1);
+      var presetDescription = new Label
+      {
+        Dock = DockStyle.Fill,
+        TextAlign = ContentAlignment.MiddleLeft,
+        ForeColor = Color.Gray,
+        Font = new Font("Segoe UI", 9, FontStyle.Regular),
+        AutoSize = false,
+        Padding = new Padding(5)
+      };
+      tablePresets.Controls.Add(presetDescription, 1, 1);
+
+      // Row 2: Apply
+      var btnApplyPreset = new Button
+      {
+        Text = "Apply Preset",
+        Dock = DockStyle.Fill,
+        BackColor = Color.LightSteelBlue,
+        AutoSize = false,
+        Height = 30
+      };
+      tablePresets.Controls.Add(btnApplyPreset, 1, 2);
+      tablePresets.Controls.Add(new Label { Dock = DockStyle.Fill }, 0, 2);
+
+      presetCombo.SelectedIndexChanged += (s, e) =>
+      {
+        string selected = presetCombo.SelectedItem?.ToString() ?? "";
+        presetDescription.Text = GetPresetDescription(selected);
+      };
+
+      btnApplyPreset.Click += (s, e) =>
+      {
+        string selected = presetCombo.SelectedItem?.ToString() ?? "";
+        ApplyPreset(selected);
+      };
+      presetDescription.Text = GetPresetDescription(PresetWeb);
+
       var tabVideo = new TabPage("Video");
       tabControl.TabPages.Add(tabVideo);
       var tableVideo = new TableLayoutPanel
@@ -781,6 +853,7 @@ namespace DMF
         "• crop=W:H:X:Y – crop video\n" +
         "• hflip / vflip – flip horizontally/vertically\n" +
         "• rotate=A – rotate by angle (degrees)\n" +
+        "• transpose=dir – rotate/reflect (1=90°CW, 2=180°, 3=270°CW)\n" +
         "• fade=in:0:30 – fade in/out\n" +
         "• overlay=X:Y – overlay another video\n" +
         "• unsharp – sharpen/soften (see docs)\n" +
@@ -790,7 +863,7 @@ namespace DMF
       tableFilters.Controls.Add(new Label { Text = "Video examples:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 0, 1);
       var hintVideo = new Label
       {
-        Text = "scale=1280:-2, crop=1920:1080:0:0, hflip, vflip, rotate=45, fade=out:0:30, overlay=10:10, unsharp=5:5:1.0, eq=contrast=1.2:brightness=0.1:saturation=1.0\n",
+        Text = "scale=1280:-2, crop=1920:1080:0:0, hflip, vflip, rotate=45, transpose=1, fade=out:0:30, overlay=10:10, unsharp=5:5:1.0, eq=contrast=1.2:brightness=0.1:saturation=1.0\n",
         TextAlign = ContentAlignment.MiddleLeft,
         Dock = DockStyle.Fill,
         ForeColor = Color.Gray,
@@ -1458,6 +1531,109 @@ namespace DMF
       outputFile.Text = GetDefaultOutputPath();
       outputFile.ForeColor = SystemColors.WindowText;
       _autoOutput = true;
+    }
+
+    private static string GetPresetDescription(string presetName)
+    {
+      return presetName switch
+      {
+        PresetWeb => "H.264 / AAC, MP4, CRF 23, medium preset.\nGood quality for web streaming.",
+        PresetHD => "H.264 High Profile, MP4, CRF 18, slow preset.\nHigh quality for HD content.",
+        PresetMobile => "H.264 Baseline, MP4, CRF 25, veryfast preset, low bitrate.\nOptimized for mobile devices.",
+        PresetLossless => "H.264 lossless (CRF 0), FLAC audio, MKV.\nVisually lossless, large file size.",
+        PresetGif => "GIF with 30 fps, scaled to 640px width, palette generation with Bayer dithering.",
+        _ => ""
+      };
+    }
+
+    private void ApplyPreset(string presetName)
+    {
+      switch (presetName)
+      {
+        case PresetWeb:
+          format.SelectedItem = "mp4";
+          videoCodec.SelectedItem = "libx264";
+          audioCodec.SelectedItem = "aac";
+          crf.Value = 23;
+          preset.SelectedItem = "medium";
+          pixelFormat.SelectedItem = "yuv420p";
+          profile.SelectedItem = "high";
+          videoBitrate.Text = "";
+          audioBitrate.Text = "128k";
+          maxrate.Text = "";
+          bufsize.Text = "";
+          gop.Value = 0;
+          audioOnly.Checked = false;
+          break;
+
+        case PresetHD:
+          format.SelectedItem = "mp4";
+          videoCodec.SelectedItem = "libx264";
+          audioCodec.SelectedItem = "aac";
+          crf.Value = 18;
+          preset.SelectedItem = "slow";
+          pixelFormat.SelectedItem = "yuv420p";
+          profile.SelectedItem = "high";
+          videoBitrate.Text = "";
+          audioBitrate.Text = "192k";
+          maxrate.Text = "";
+          bufsize.Text = "";
+          gop.Value = 0;
+          audioOnly.Checked = false;
+          break;
+
+        case PresetMobile:
+          format.SelectedItem = "mp4";
+          videoCodec.SelectedItem = "libx264";
+          audioCodec.SelectedItem = "aac";
+          crf.Value = 25;
+          preset.SelectedItem = "veryfast";
+          pixelFormat.SelectedItem = "yuv420p";
+          profile.SelectedItem = "baseline";
+          videoBitrate.Text = "500k";
+          audioBitrate.Text = "64k";
+          maxrate.Text = "";
+          bufsize.Text = "";
+          gop.Value = 0;
+          audioOnly.Checked = false;
+          break;
+
+        case PresetLossless:
+          format.SelectedItem = "mkv";
+          videoCodec.SelectedItem = "libx264";
+          audioCodec.SelectedItem = "flac";
+          crf.Value = 0;
+          preset.SelectedItem = "ultrafast";
+          pixelFormat.SelectedItem = "yuv444p";
+          profile.SelectedItem = "high";
+          videoBitrate.Text = "";
+          audioBitrate.Text = "";
+          maxrate.Text = "";
+          bufsize.Text = "";
+          gop.Value = 0;
+          audioOnly.Checked = false;
+          break;
+
+        case PresetGif:
+          format.SelectedItem = "gif";
+          gifFps.Value = 30;
+          gifScaleW.Value = 640;
+          gifScaleH.Value = 0;
+          gifCrop.Text = "w:h:x:y (0 for auto)";
+          gifCrop.ForeColor = Color.Gray;
+          chkPalette.Checked = true;
+          gifDither.SelectedItem = "bayer";
+          gifBayerScale.Value = 5;
+          audioOnly.Checked = false;
+          break;
+      }
+
+      UpdateControlStates();
+
+      if (_previewForm != null && !_previewForm.IsDisposed && _previewForm.Visible)
+        BtnUpdatePreview_Click(this, EventArgs.Empty);
+
+      UpdateCodecHints();
     }
 
     private List<string> BuildGifArgs()
