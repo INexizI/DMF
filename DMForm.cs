@@ -487,6 +487,7 @@ namespace DMF
       };
       mainContainer.Controls.Add(tabControl);
 
+      /* Basic */
       var tabBasic = new TabPage("Basic");
       tabControl.TabPages.Add(tabBasic);
       var tableBasic = new TableLayoutPanel
@@ -630,6 +631,7 @@ namespace DMF
       tableBasic.Controls.Add(checkPanel, 1, 8);
       tableBasic.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 8);
 
+      /* Presets */
       var tabPresets = new TabPage("Presets");
       tabControl.TabPages.Add(tabPresets);
       var tablePresets = new TableLayoutPanel
@@ -696,13 +698,14 @@ namespace DMF
       };
       presetDescription.Text = GetPresetDescription(PresetWeb);
 
+      /* Video */
       var tabVideo = new TabPage("Video");
       tabControl.TabPages.Add(tabVideo);
       var tableVideo = new TableLayoutPanel
       {
         Dock = DockStyle.Fill,
         ColumnCount = 3,
-        RowCount = 8,
+        RowCount = 9,
         Padding = new Padding(10),
         AutoSize = false
       };
@@ -789,15 +792,16 @@ namespace DMF
         Increment = 10
       };
       tableVideo.Controls.Add(gop, 1, 7);
-      tableVideo.Controls.Add(new Label { Text = "0 = default, max - 1000", TextAlign = ContentAlignment.BottomLeft, Dock = DockStyle.Top, ForeColor = Color.Gray }, 2, 7);
+      tableVideo.Controls.Add(new Label { Text = "0 = default, max - 1000", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 7);
 
+      /* Audio */
       var tabAudio = new TabPage("Audio");
       tabControl.TabPages.Add(tabAudio);
       var tableAudio = new TableLayoutPanel
       {
         Dock = DockStyle.Fill,
         ColumnCount = 3,
-        RowCount = 2,
+        RowCount = 3,
         Padding = new Padding(10),
         AutoSize = false
       };
@@ -823,15 +827,16 @@ namespace DMF
         Increment = 1
       };
       tableAudio.Controls.Add(audioQuality, 1, 1);
-      tableAudio.Controls.Add(new Label { Text = "VBR (0–10, lower = better)", TextAlign = ContentAlignment.BottomLeft, Dock = DockStyle.Top, ForeColor = Color.Gray }, 2, 1);
+      tableAudio.Controls.Add(new Label { Text = "VBR (0–10, lower = better)", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 1);
 
+      /* Filters */
       var tabFilters = new TabPage("Filters");
       tabControl.TabPages.Add(tabFilters);
       var tableFilters = new TableLayoutPanel
       {
         Dock = DockStyle.Fill,
         ColumnCount = 3,
-        RowCount = 4,
+        RowCount = 5,
         Padding = new Padding(10),
         AutoSize = false
       };
@@ -894,12 +899,12 @@ namespace DMF
         "• aresample – resample audio");
 
       // Row 3: Audio filter hint
-      tableFilters.Controls.Add(new Label { Text = "Audio examples:", TextAlign = ContentAlignment.BottomRight, Padding = new Padding(0, 5, 0, 0), Dock = DockStyle.Top, ForeColor = Color.Gray }, 0, 3);
+      tableFilters.Controls.Add(new Label { Text = "Audio examples:", TextAlign = ContentAlignment.MiddleRight, Padding = new Padding(0, 5, 0, 0), Dock = DockStyle.Fill, ForeColor = Color.Gray }, 0, 3);
       var hintAudio = new Label
       {
         Text = "volume=1.5, afadet=in:ss=0:d=5, equalizerf=100:t=h:w=1:g=-10, pan=mono|c0=0.5*c0+0.5*c1, aecho=0.8:0.9:1000:0.3, chorus=0.7:0.9:55:0.4:0.25:2, areverse, asetrate=44100, aresample=44100\n",
         TextAlign = ContentAlignment.BottomLeft,
-        Dock = DockStyle.Top,
+        Dock = DockStyle.Fill,
         ForeColor = Color.Gray,
         Font = new Font("Segoe UI", 8, FontStyle.Regular),
         AutoSize = true,
@@ -908,6 +913,7 @@ namespace DMF
       tableFilters.SetColumnSpan(hintAudio, 2);
       tableFilters.Controls.Add(hintAudio, 1, 3);
 
+      /* Advanced */
       var tabAdvanced = new TabPage("Advanced");
       tabControl.TabPages.Add(tabAdvanced);
       var tableAdvanced = new TableLayoutPanel
@@ -961,13 +967,14 @@ namespace DMF
       tableAdvanced.Controls.Add(hwPanel, 1, 1);
       tableAdvanced.Controls.Add(new Label { Text = "decoder/output", TextAlign = ContentAlignment.BottomLeft, Dock = DockStyle.Top, ForeColor = Color.Gray }, 2, 1);
 
+      /* GIF */
       var tabGif = new TabPage("GIF");
       tabControl.TabPages.Add(tabGif);
       var tableGif = new TableLayoutPanel
       {
         Dock = DockStyle.Fill,
         ColumnCount = 3,
-        RowCount = 6,
+        RowCount = 7,
         Padding = new Padding(10),
         AutoSize = false
       };
@@ -1082,8 +1089,9 @@ namespace DMF
         Enabled = false
       };
       tableGif.Controls.Add(gifBayerScale, 1, 5);
-      tableGif.Controls.Add(new Label { Text = "0–5 (for Bayer dither)", TextAlign = ContentAlignment.BottomLeft, Dock = DockStyle.Top, ForeColor = Color.Gray }, 2, 5);
+      tableGif.Controls.Add(new Label { Text = "0–5 (for Bayer dither)", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 5);
 
+      /* Bottom Panel/Buttons */
       var bottomPanel = new Panel
       {
         Dock = DockStyle.Bottom,
