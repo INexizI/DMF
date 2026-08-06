@@ -43,6 +43,8 @@ namespace DMF
     private const string PresetHD = "HD";
     private const string PresetMobile = "Mobile";
     private const string PresetLossless = "Lossless";
+    private const string Preset2K = "2K";
+    private const string Preset4K = "4K";
     private const string PresetGif = "GIF";
     /* UI Controls */
     // Basic
@@ -655,7 +657,7 @@ namespace DMF
       {
         Dock = DockStyle.Fill,
         DropDownStyle = ComboBoxStyle.DropDownList,
-        Items = { PresetWeb, PresetHD, PresetMobile, PresetLossless, PresetGif },
+        Items = { PresetWeb, PresetHD, PresetMobile, PresetLossless, Preset2K, Preset4K, PresetGif },
         SelectedIndex = 0
       };
       tablePresets.Controls.Add(presetCombo, 1, 0);
@@ -1549,6 +1551,8 @@ namespace DMF
         PresetHD => "H.264 High Profile, MP4, CRF 18, slow preset.\nHigh quality for HD content.",
         PresetMobile => "H.264 Baseline, MP4, CRF 25, veryfast preset, low bitrate.\nOptimized for mobile devices.",
         PresetLossless => "H.264 lossless (CRF 0), FLAC audio, MKV.\nVisually lossless, large file size.",
+        Preset2K => "H.264 High Profile, MP4, CRF 18, 12 Mbps, 2560x1440.\nHigh quality for 2K (QHD) content.",
+        Preset4K => "H.265 (HEVC), MP4, CRF 20, 25 Mbps, 3840x2160.\nHigh quality for 4K (UHD) content.",
         PresetGif => "GIF with 30 fps, scaled to 640px width, palette generation with Bayer dithering.",
         _ => ""
       };
@@ -1619,6 +1623,40 @@ namespace DMF
           maxrate.Text = "";
           bufsize.Text = "";
           gop.Value = 0;
+          audioOnly.Checked = false;
+          break;
+
+        case Preset2K:
+          format.SelectedItem = "mp4";
+          videoCodec.SelectedItem = "libx264";
+          audioCodec.SelectedItem = "aac";
+          crf.Value = 18;
+          preset.SelectedItem = "slow";
+          pixelFormat.SelectedItem = "yuv420p";
+          profile.SelectedItem = "high";
+          videoBitrate.Text = "12M";
+          audioBitrate.Text = "192k";
+          maxrate.Text = "18M";
+          bufsize.Text = "24M";
+          gop.Value = 0;
+          videoFilter.Text = "scale=2560:-2";
+          audioOnly.Checked = false;
+          break;
+
+        case Preset4K:
+          format.SelectedItem = "mp4";
+          videoCodec.SelectedItem = "libx265";
+          audioCodec.SelectedItem = "aac";
+          crf.Value = 20;
+          preset.SelectedItem = "medium";
+          pixelFormat.SelectedItem = "yuv420p";
+          profile.SelectedItem = "main";
+          videoBitrate.Text = "25M";
+          audioBitrate.Text = "256k";
+          maxrate.Text = "35M";
+          bufsize.Text = "50M";
+          gop.Value = 0;
+          videoFilter.Text = "scale=3840:-2";
           audioOnly.Checked = false;
           break;
 
