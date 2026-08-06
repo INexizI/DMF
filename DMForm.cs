@@ -103,31 +103,16 @@ namespace DMF
     private bool _updatingFormatFromPath = false;
     private CancellationTokenSource? _cancellationTokenSource;
 
-    private readonly Dictionary<string, string> audioCodecDescriptions = new()
-    {
-      { "copy", "Stream copy (no re-encode)" },
-      { "aac", "AAC (Advanced Audio Coding)" },
-      { "libfdk_aac", "Fraunhofer FDK AAC (high quality)" },
-      { "mp3", "MPEG-1 Audio Layer III" },
-      { "libmp3lame", "LAME MP3 encoder" },
-      { "ac3", "Dolby Digital (AC-3)" },
-      { "flac", "Free Lossless Audio Codec" },
-      { "opus", "Opus (low-latency, high quality)" },
-      { "libvorbis", "Vorbis (open, patent-free)" },
-      { "pcm_s16le", "Uncompressed PCM (WAV-like)" },
-      { "wav", "WAV (PCM 16-bit)" }
-    };
-
     private readonly Dictionary<string, string> videoCodecDescriptions = new()
     {
-      { "copy", "Stream copy (no re-encode)" },
-      { "libx264", "H.264 / AVC (software, widely compatible)" },
-      { "libx265", "H.265 / HEVC (software, higher compression)" },
-      { "libvpx-vp9", "VP9 (open, good compression)" },
-      { "libvpx", "VP8 (older open format)" },
-      { "mpeg4", "MPEG-4 part 2 (Xvid/DivX compatible)" },
-      { "libxvid", "Xvid (MPEG-4 ASP)" },
-      { "mpeg2video", "MPEG-2 (DVD, broadcast)" },
+      { "copy", "Stream copy\n(no re-encode)" },
+      { "libx264", "H.264 / AVC\n(software, widely compatible)" },
+      { "libx265", "H.265 / HEVC\n(software, high compression)" },
+      { "libvpx-vp9", "VP9\n(open, good compression)" },
+      { "libvpx", "VP8\n(older open format)" },
+      { "mpeg4", "MPEG-4 part 2\n(Xvid/DivX compatible)" },
+      { "libxvid", "Xvid\n(MPEG-4 ASP)" },
+      { "mpeg2video", "MPEG-2\n(DVD, broadcast)" },
       { "wmv2", "Windows Media Video 2" },
       { "h264_nvenc", "NVIDIA hardware H.264" },
       { "hevc_nvenc", "NVIDIA hardware HEVC" },
@@ -135,14 +120,28 @@ namespace DMF
       { "hevc_amf", "AMD hardware HEVC" },
       { "h264_qsv", "Intel QuickSync H.264" },
       { "hevc_qsv", "Intel QuickSync HEVC" },
-      { "libaom-av1", "AV1 (software, very slow)" }
+      { "libaom-av1", "AV1\n(software, very slow)" }
+    };
+    private readonly Dictionary<string, string> audioCodecDescriptions = new()
+    {
+      { "copy", "Stream copy\n(no re-encode)" },
+      { "aac", "AAC\n(Advanced Audio Coding)" },
+      { "libfdk_aac", "Fraunhofer FDK AAC\n(high quality)" },
+      { "mp3", "MPEG-1 Audio Layer III" },
+      { "libmp3lame", "LAME MP3 encoder" },
+      { "ac3", "Dolby Digital\n(AC-3)" },
+      { "flac", "Free Lossless Audio Codec" },
+      { "opus", "Opus\n(low-latency, high quality)" },
+      { "libvorbis", "Vorbis\n(open, patent-free)" },
+      { "pcm_s16le", "Uncompressed PCM\n(WAV-like)" },
+      { "wav", "WAV\n(PCM 16-bit)" }
     };
 
     [Serializable]
     public class Settings
     {
       public int WinWidth { get; set; } = 800;
-      public int WinHeight { get; set; } = 600;
+      public int WinHeight { get; set; } = 450;
       public int WinX { get; set; } = -1;
       public int WinY { get; set; } = -1;
       public bool WinMax { get; set; } = false;
@@ -433,10 +432,9 @@ namespace DMF
           StartPosition = FormStartPosition.CenterScreen;
       }
 
-      FormBorderStyle = FormBorderStyle.FixedSingle;
-      MaximizeBox = false;
-      MinimumSize = new Size(800, 600);
-      MaximumSize = new Size(800, 600);
+      FormBorderStyle = FormBorderStyle.Sizable;
+      MaximizeBox = true;
+      MinimumSize = new Size(800, 450);
     }
 
     private void SaveSettings()
@@ -462,12 +460,7 @@ namespace DMF
     private void InitializeForm()
     {
       Text = "DMF";
-      Size = new Size(800, 600);
-      MinimumSize = new Size(800, 600);
-      MaximumSize = new Size(800, 600);
       DoubleBuffered = true;
-      FormBorderStyle = FormBorderStyle.FixedSingle;
-      MaximizeBox = false;
 
       this.AllowDrop = true;
       this.DragEnter += DMForm_DragEnter;
@@ -502,7 +495,7 @@ namespace DMF
       };
       tableBasic.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
       tableBasic.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-      tableBasic.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
+      tableBasic.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
       tabBasic.Controls.Add(tableBasic);
 
       // Row 0: Input
@@ -587,8 +580,8 @@ namespace DMF
       videoCodecHint = new Label
       {
         Dock = DockStyle.Fill,
-        TextAlign = ContentAlignment.MiddleLeft,
-        ForeColor = Color.LightYellow,
+        TextAlign = ContentAlignment.MiddleCenter,
+        ForeColor = Color.Gray,
         Font = new Font("Segoe UI", 8, FontStyle.Italic),
         AutoSize = false
       };
@@ -608,8 +601,8 @@ namespace DMF
       audioCodecHint = new Label
       {
         Dock = DockStyle.Fill,
-        TextAlign = ContentAlignment.MiddleLeft,
-        ForeColor = Color.LightYellow,
+        TextAlign = ContentAlignment.MiddleCenter,
+        ForeColor = Color.Gray,
         Font = new Font("Segoe UI", 8, FontStyle.Italic),
         AutoSize = false
       };
@@ -851,7 +844,7 @@ namespace DMF
       tableFilters.Controls.Add(new Label { Text = "Video filter:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 0);
       videoFilter = new TextBox { Dock = DockStyle.Fill, Text = "" };
       tableFilters.Controls.Add(videoFilter, 1, 0);
-      Label videoHint = new Label { Text = "e.g. fade=in:0:5", TextAlign = ContentAlignment.MiddleCenter, Dock = DockStyle.Fill, ForeColor = Color.Gray };
+      Label videoHint = new Label { Text = "e.g. fade=in:0:5", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray };
       tableFilters.Controls.Add(videoHint, 2, 0);
       toolTip.SetToolTip(videoHint,
         "Common video filters:\n" +
@@ -885,7 +878,7 @@ namespace DMF
       tableFilters.Controls.Add(new Label { Text = "Audio filter:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 2);
       audioFilter = new TextBox { Dock = DockStyle.Fill, Text = "" };
       tableFilters.Controls.Add(audioFilter, 1, 2);
-      Label audioHint = new Label { Text = "e.g. volume=2", TextAlign = ContentAlignment.MiddleCenter, Dock = DockStyle.Fill, ForeColor = Color.Gray };
+      Label audioHint = new Label { Text = "e.g. volume=2", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray };
       tableFilters.Controls.Add(audioHint, 2, 2);
       toolTip.SetToolTip(audioHint,
         "Common audio filters:\n" +
@@ -2472,7 +2465,7 @@ namespace DMF
     private static Version GetCurrentVersion()
     {
       var assembly = Assembly.GetEntryAssembly();
-      var versionAttr = assembly?.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>();
+      var versionAttr = assembly?.GetCustomAttribute<AssemblyInformationalVersionAttribute>();
       var versionString = versionAttr?.InformationalVersion ?? "0.0.0";
       var idx = versionString.IndexOf('+');
       if (idx > 0) versionString = versionString[..idx];
