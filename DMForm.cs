@@ -6,6 +6,7 @@ using System.Globalization;
 using System.IO;
 using System.Net.Http;
 using System.Reflection;
+using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -2207,6 +2208,8 @@ namespace DMF
       progressBar.Value = 0;
       status.Text = "Processing...";
 
+      string fullCommand = "";
+
       try
       {
         string ffmpegPath = FfmpegExecutable;
@@ -2316,6 +2319,7 @@ namespace DMF
         argsList.Add($"\"{outputFile.Text}\"");
 
         string args = string.Join(" ", argsList);
+        fullCommand = $"\"{ffmpegPath}\" {args}";
 
         await RunFFmpeg(ffmpegPath, args, token, inputDuration, (percent, _) =>
         {
@@ -2349,8 +2353,33 @@ namespace DMF
       }
       catch (Exception ex)
       {
+        string userMessage = ex.Message;
+
+        if (userMessage.Contains("Invalid data found", StringComparison.OrdinalIgnoreCase))
+          userMessage = "The input file appears to be corrupted or unsupported.\n\n" + userMessage;
+        else if (userMessage.Contains("codec not found", StringComparison.OrdinalIgnoreCase))
+          userMessage = "The selected codec is not available in your FFmpeg build.\n\n" + userMessage;
+        else if (userMessage.Contains("Permission denied", StringComparison.OrdinalIgnoreCase))
+          userMessage = "Access denied to the output folder or file.\n\n" + userMessage;
+        else if (userMessage.Contains("Filter not found", StringComparison.OrdinalIgnoreCase) ||
+                 userMessage.Contains("No such filter", StringComparison.OrdinalIgnoreCase))
+          userMessage = "The specified filter does not exist.\nCheck the filter name (see ffmpeg -filters).\n\n" + userMessage;
+        else if (userMessage.Contains("Unsupported codec", StringComparison.OrdinalIgnoreCase) ||
+                 userMessage.Contains("Encoder not found", StringComparison.OrdinalIgnoreCase))
+          userMessage = "The selected codec is not supported for this format.\nTry changing the format or codec.\n\n" + userMessage;
+        else if (userMessage.Contains("Unable to find a suitable output format", StringComparison.OrdinalIgnoreCase))
+          userMessage = "The output format is not compatible with your settings.\nCheck container and codec combination.\n\n" + userMessage;
+        else if (userMessage.Contains("Invalid argument", StringComparison.OrdinalIgnoreCase))
+          userMessage = "One of the FFmpeg arguments is incorrect.\nCheck values (bitrate, filter parameters, etc.).\n\n" + userMessage;
+        else if (userMessage.Contains("No such file", StringComparison.OrdinalIgnoreCase))
+          userMessage = "The input file was not found.\nPlease check the path and try again.\n\n" + userMessage;
+        else if (userMessage.Contains("out of range", StringComparison.OrdinalIgnoreCase))
+          userMessage = "A numeric parameter is out of allowed range.\nCheck CRF, bitrate, or FPS values.\n\n" + userMessage;
+
+        userMessage += "\n\nCommand:\n" + fullCommand;
+
         status.Text = "Error";
-        MessageBox.Show($"Error: {ex.Message}", "FFmpeg Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        MessageBox.Show(userMessage, "FFmpeg Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
       }
       finally
       {
@@ -2373,6 +2402,60 @@ namespace DMF
       btnCancel.Enabled = false;
     }
 
+    private static string ExtractRelevantError(string fullError)
+    {
+      if (string.IsNullOrWhiteSpace(fullError))
+        return "Unknown error (no output from FFmpeg).";
+
+      var lines = fullError.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+      var errorLines = new List<string>();
+
+      foreach (var line in lines)
+      {
+        if (line.Contains("version", StringComparison.OrdinalIgnoreCase) ||
+            line.Contains("built with", StringComparison.OrdinalIgnoreCase) ||
+            line.Contains("configuration:", StringComparison.OrdinalIgnoreCase) ||
+            line.Contains("Copyright", StringComparison.OrdinalIgnoreCase) ||
+            line.Contains("libav", StringComparison.OrdinalIgnoreCase) ||
+            line.Contains("gcc", StringComparison.OrdinalIgnoreCase))
+        {
+          continue;
+        }
+
+        if (line.Contains("Error", StringComparison.OrdinalIgnoreCase) ||
+            line.Contains("Invalid", StringComparison.OrdinalIgnoreCase) ||
+            line.Contains("not found", StringComparison.OrdinalIgnoreCase) ||
+            line.Contains("No such", StringComparison.OrdinalIgnoreCase) ||
+            line.Contains("Cannot", StringComparison.OrdinalIgnoreCase) ||
+            line.Contains("Unable", StringComparison.OrdinalIgnoreCase) ||
+            line.Contains("failed", StringComparison.OrdinalIgnoreCase) ||
+            line.Contains("Permission denied", StringComparison.OrdinalIgnoreCase) ||
+            line.Contains("codec", StringComparison.OrdinalIgnoreCase) ||
+            line.Contains("filter", StringComparison.OrdinalIgnoreCase) ||
+            line.Contains("unsupported", StringComparison.OrdinalIgnoreCase) ||
+            line.Contains("invalid", StringComparison.OrdinalIgnoreCase))
+        {
+          errorLines.Add(line);
+        }
+      }
+
+      if (errorLines.Count > 0)
+      {
+        string first = errorLines.First();
+        string last = errorLines.Last();
+        return first + (errorLines.Count > 1 ? "\n" + last : "");
+      }
+
+      var firstLines = lines.Take(2).ToList();
+      var lastLine = lines.LastOrDefault();
+      if (lastLine != null && !string.IsNullOrEmpty(lastLine) && !firstLines.Contains(lastLine))
+      {
+        firstLines.Add("...");
+        firstLines.Add(lastLine);
+      }
+      return firstLines.Count > 0 ? string.Join("\n", firstLines) : "No error details available.";
+    }
+
     private static async Task RunFFmpeg(string path, string args, CancellationToken cancellationToken, double totalDuration, Action<int, TimeSpan>? progressCallback = null)
     {
       using var process = new Process();
@@ -2387,6 +2470,7 @@ namespace DMF
 
       _ = process.StandardOutput.ReadToEndAsync();
 
+      var errorBuilder = new StringBuilder();
       var errorTask = Task.Run(async () =>
       {
         try
@@ -2395,6 +2479,8 @@ namespace DMF
           {
             string? line = await process.StandardError.ReadLineAsync(cancellationToken);
             if (line == null) break;
+
+            lock (errorBuilder) { errorBuilder.AppendLine(line); }
 
             if (line.Contains("time="))
             {
@@ -2436,8 +2522,9 @@ namespace DMF
 
       if (process.ExitCode != 0)
       {
-        string error = await process.StandardError.ReadToEndAsync();
-        throw new Exception($"FFmpeg exited with code {process.ExitCode}. Error: {error}");
+        string fullError = errorBuilder.ToString();
+        string relevant = ExtractRelevantError(fullError);
+        throw new Exception(relevant);
       }
     }
 
