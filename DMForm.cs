@@ -72,6 +72,7 @@ namespace DMF
     private TextBox bufsize = null!;
     private ComboBox profile = null!;
     private NumericUpDown gop = null!;
+    private NumericUpDown videoFps = null!;
     // Audio
     private TextBox audioBitrate = null!;
     private NumericUpDown audioQuality = null!;
@@ -700,7 +701,7 @@ namespace DMF
       {
         Dock = DockStyle.Fill,
         ColumnCount = 3,
-        RowCount = 9,
+        RowCount = 10,
         Padding = new Padding(10),
         AutoSize = false
       };
@@ -788,6 +789,19 @@ namespace DMF
       };
       tableVideo.Controls.Add(gop, 1, 7);
       tableVideo.Controls.Add(new Label { Text = "0 = default, max - 1000", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 7);
+
+      // Row 8: Output FPS
+      tableVideo.Controls.Add(new Label { Text = "Output FPS:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 8);
+      videoFps = new NumericUpDown
+      {
+        Dock = DockStyle.Fill,
+        Minimum = 0,
+        Maximum = 120,
+        Value = 0,
+        Increment = 1
+      };
+      tableVideo.Controls.Add(videoFps, 1, 8);
+      tableVideo.Controls.Add(new Label { Text = "0 = source FPS", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 8);
 
       /* Audio */
       var tabAudio = new TabPage("Audio");
@@ -1353,6 +1367,7 @@ namespace DMF
         bufsize.Enabled = false;
         profile.Enabled = false;
         gop.Enabled = false;
+        videoFps.Enabled = false;
         audioCodec.Enabled = false;
         audioBitrate.Enabled = false;
         audioQuality.Enabled = false;
@@ -1404,6 +1419,7 @@ namespace DMF
       bufsize.Enabled = encodingEnabled && videoBitrateSet;
       profile.Enabled = encodingEnabled;
       gop.Enabled = encodingEnabled;
+      videoFps.Enabled = encodingEnabled;
       videoFilter.Enabled = videoEnabled;
 
       // ------ Audio controls ------
@@ -1544,8 +1560,8 @@ namespace DMF
         PresetHD => "H.264 High Profile, MP4, CRF 18, slow preset.\nHigh quality for HD content.",
         PresetMobile => "H.264 Baseline, MP4, CRF 25, veryfast preset, low bitrate.\nOptimized for mobile devices.",
         PresetLossless => "H.264 lossless (CRF 0), FLAC audio, MKV.\nVisually lossless, large file size.",
-        Preset2K => "H.264 High Profile, MP4, CRF 18, 12 Mbps, 2560x1440.\nHigh quality for 2K (QHD) content.",
-        Preset4K => "H.265 (HEVC), MP4, CRF 20, 25 Mbps, 3840x2160.\nHigh quality for 4K (UHD) content.",
+        Preset2K => "H.264 High Profile, MP4, CRF 18, 12 Mbps, 30 fps, 2560x1440.\nHigh quality for 2K (QHD) content.",
+        Preset4K => "H.265 (HEVC), MP4, CRF 20, 25 Mbps, 30 fps, 3840x2160.\nHigh quality for 4K (UHD) content.",
         PresetGif => "GIF with 30 fps, scaled to 640px width, palette generation with Bayer dithering.",
         _ => ""
       };
@@ -1632,6 +1648,7 @@ namespace DMF
           maxrate.Text = "18M";
           bufsize.Text = "24M";
           gop.Value = 0;
+          videoFps.Value = 30;
           videoFilter.Text = "scale=2560:-2";
           audioOnly.Checked = false;
           break;
@@ -1649,6 +1666,7 @@ namespace DMF
           maxrate.Text = "35M";
           bufsize.Text = "50M";
           gop.Value = 0;
+          videoFps.Value = 30;
           videoFilter.Text = "scale=3840:-2";
           audioOnly.Checked = false;
           break;
@@ -2251,6 +2269,9 @@ namespace DMF
 
             if (gop.Value > 0)
               argsList.Add($"-g {gop.Value}");
+
+            if (videoFps.Value > 0)
+              argsList.Add($"-r {videoFps.Value}");
           }
           else if (!audioOnlyChecked && videoCodecSelected == "copy")
           {
