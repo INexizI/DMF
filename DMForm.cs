@@ -37,7 +37,7 @@ namespace DMF
     private const string FfprobeExecutable = "ffprobe";
     private const string ExplorerExecutable = "explorer.exe";
     private const string FfmpegDownloadUrl = "https://ffmpeg.org/download.html";
-    private const int ProcessCheckTimeoutMs = 2000;
+    private const int ProcessCheckTimeoutMs = 3000;
     private const int WindowEdgeOffset = 50;
     /* Presets */
     private const string PresetWeb = "Web";
@@ -104,6 +104,9 @@ namespace DMF
     private PreviewForm? _previewForm = null;
     private bool _updatingFormatFromPath = false;
     private CancellationTokenSource? _cancellationTokenSource;
+    private bool _ffmpegAvailable = false;
+    private bool _ffmpegChecked = false;
+    private string? _lastFfmpegPath = null;
 
     private readonly Dictionary<string, string> videoCodecDescriptions = new()
     {
@@ -159,6 +162,44 @@ namespace DMF
       public string? LatestVersion { get; set; }
     }
 
+    public static class Logger
+    {
+      private static readonly Lock LockObj = new();
+      private static string LogPath => Path.Combine(GetAppDataFolder(), "log.txt");
+      private static readonly int MaxLogSizeBytes = 5 * 1024 * 1024;
+
+      static Logger() => RotateLogIfNeeded();
+
+      private static void RotateLogIfNeeded()
+      {
+        try
+        {
+          if (File.Exists(LogPath) && new FileInfo(LogPath).Length > MaxLogSizeBytes)
+          {
+            string oldPath = Path.Combine(Path.GetDirectoryName(LogPath)!, "log.txt");
+            if (File.Exists(oldPath)) File.Delete(oldPath);
+            File.Move(LogPath, oldPath);
+          }
+        }
+        catch { /* ... */ }
+      }
+
+      private static void WriteLog(string level, string message)
+      {
+        try
+        {
+          string line = $"{DateTime.Now:yyyy-MM-dd HH-mm-ss.fff} [{level}] {message}";
+          lock (LockObj) { File.AppendAllText(LogPath, line + Environment.NewLine); }
+        }
+        catch { /* ... */ }
+      }
+
+      public static void Info(string message) => WriteLog("INFO", message);
+      public static void Warning(string message) => WriteLog("WARN", message);
+      public static void Error(string message) => WriteLog("ERROR", message);
+      public static void Debug(string message) => WriteLog("DEBUG", message);
+    }
+
     public DMForm()
     {
       settingsFile = Path.Combine(GetAppDataFolder(), "settings.json");
@@ -173,22 +214,32 @@ namespace DMF
 
       this.Shown += async (s, e) => await CheckForUpdatesAsync();
 
+      if (!File.Exists(UpdateCacheFile))
+      {
+        SaveUpdateCache(new UpdateCache());
+        Logger.Debug("Update cache file created");
+      }
+
       if (!CheckFFmpeg())
       {
         status.Text = "FFmpeg not found";
         btnProcess.Enabled = false;
       }
+
+      Logger.Info($"DMF started, version {GetCurrentVersion()}");
+      Logger.Info($"Settings file: {settingsFile}");
     }
 
     private async Task CheckForUpdatesAsync()
     {
+      Logger.Debug("Checking for updates...");
       try
       {
         var cache = LoadUpdateCache();
 
         if ((DateTime.Now - cache.LastCheckTime).TotalHours < UpdateCheckIntervalHours)
         {
-          Debug.WriteLine($"Update check skipped: last check was at {cache.LastCheckTime}");
+          Logger.Debug($"Update check skipped: last check at {cache.LastCheckTime}");
           return;
         }
 
@@ -205,13 +256,13 @@ namespace DMF
             cache.ETag = response.Headers.ETag.Tag?.Trim('"');
           cache.LastCheckTime = DateTime.Now;
           SaveUpdateCache(cache);
-          Debug.WriteLine("Update check: no new version (304)");
+          Logger.Debug("Update check: no new version (304)");
           return;
         }
 
         if (!response.IsSuccessStatusCode)
         {
-          Debug.WriteLine($"Update check failed: {response.StatusCode}");
+          Logger.Warning($"Update check failed: {response.StatusCode}");
           return;
         }
 
@@ -232,6 +283,7 @@ namespace DMF
 
         if (latestVersion > currentVersion)
         {
+          Logger.Info($"New version {latestVersion} available (current {currentVersion})");
           var result = MessageBox.Show(
             $"New version {latestVersion} available (current: {currentVersion})\n\nDo you want to download it?",
             "Update Available",
@@ -241,7 +293,7 @@ namespace DMF
             Process.Start(new ProcessStartInfo($"https://github.com/{GithubOwner}/{GithubRepo}/releases/latest") { UseShellExecute = true });
         }
       }
-      catch (Exception ex) { Debug.WriteLine($"Update check failed: {ex.Message}"); }
+      catch (Exception ex) { Logger.Error($"Update check failed: {ex.Message}"); }
     }
 
     private UpdateCache LoadUpdateCache()
@@ -268,7 +320,7 @@ namespace DMF
       catch (Exception ex) { Debug.WriteLine($"Failed to save update cache: {ex.Message}"); }
     }
 
-    private static bool IsExecutableAvailable(string path, string arguments)
+    private static bool IsExecutableAvailable(string path, string arguments, int timeoutMs = ProcessCheckTimeoutMs)
     {
       try
       {
@@ -283,106 +335,99 @@ namespace DMF
         using var p = Process.Start(procInfo);
         if (p == null) return false;
         p.WaitForExit(ProcessCheckTimeoutMs);
-        return p.ExitCode == 0;
+        return p.HasExited && p.ExitCode == 0;
       }
-      catch { return false; }
+      catch (Exception ex)
+      {
+        Logger.Error($"IsExecutableAvailable failed: {ex.Message}");
+        return false;
+      }
     }
 
     private bool CheckFFmpeg()
     {
       string ffmpegPath = settings.FfmpegPath ?? FfmpegExecutable;
-      if (!IsExecutableAvailable(ffmpegPath, "-version"))
-      {
-        var result = MessageBox.Show(
-          "FFmpeg not found.\n\n" +
-          "Would you like to specify the path to ffmpeg.exe?",
-          "Missing FFmpeg",
-          MessageBoxButtons.YesNo,
-          MessageBoxIcon.Warning);
 
-        if (result == DialogResult.Yes)
-        {
-          using var dialog = new OpenFileDialog
-          {
-            Title = "Select ffmpeg.exe",
-            Filter = "Executable|ffmpeg.exe|All files|*.*"
-          };
-          if (dialog.ShowDialog() == DialogResult.OK)
-          {
-            settings.FfmpegPath = dialog.FileName;
-            string dir = Path.GetDirectoryName(dialog.FileName)!;
-            string probePath = Path.Combine(dir, "ffprobe.exe");
-            if (File.Exists(probePath))
-              settings.FfprobePath = probePath;
-            else
-            {
-              var probeResult = MessageBox.Show(
-                "ffprobe.exe not found in the same folder.\n" +
-                "Do you want to specify its location manually?",
-                "ffprobe missing",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Warning);
-              if (probeResult == DialogResult.Yes)
-              {
-                using var probeDialog = new OpenFileDialog
-                {
-                  Title = "Select ffprobe.exe",
-                  Filter = "Executable|ffprobe.exe|All files|*.*"
-                };
-                if (probeDialog.ShowDialog() == DialogResult.OK)
-                  settings.FfprobePath = probeDialog.FileName;
-              }
-            }
-            SaveSettings();
-            return true;
-          }
-          else
-          {
-            var download = MessageBox.Show(
-              "FFmpeg is required to run this application.\n" +
-              "Do you want to open the download page?",
-              "Download FFmpeg",
-              MessageBoxButtons.YesNo,
-              MessageBoxIcon.Information);
-            if (download == DialogResult.Yes)
-              Process.Start(new ProcessStartInfo(FfmpegDownloadUrl) { UseShellExecute = true });
-            return false;
-          }
-        }
-        else
-          return false;
+      if (_ffmpegChecked && _lastFfmpegPath == ffmpegPath)
+      {
+        Logger.Debug($"Using cached FFmpeg check result: {_ffmpegAvailable} (path: {ffmpegPath})");
+        return _ffmpegAvailable;
       }
 
-      string ffprobePath = settings.FfprobePath ?? FfprobeExecutable;
-      if (!IsExecutableAvailable(ffprobePath, "-version"))
+      Logger.Debug($"Checking FFmpeg at '{ffmpegPath}'");
+      bool available = IsExecutableAvailable(ffmpegPath, "-version", 3000);
+
+      if (available)
       {
-        var result = MessageBox.Show(
-          "ffprobe not found.\n\n" +
-          "Would you like to specify the path to ffprobe.exe?",
-          "Missing ffprobe",
-          MessageBoxButtons.YesNo,
-          MessageBoxIcon.Warning);
-        if (result == DialogResult.Yes)
-        {
-          using var dialog = new OpenFileDialog
-          {
-            Title = "Select ffprobe.exe",
-            Filter = "Executable|ffprobe.exe|All files|*.*"
-          };
-          if (dialog.ShowDialog() == DialogResult.OK)
-          {
-            settings.FfprobePath = dialog.FileName;
-            SaveSettings();
-            return true;
-          }
-          else
-            return false;
-        }
-        else
-          return false;
+        Logger.Info($"FFmpeg found at '{ffmpegPath}'");
+        _ffmpegAvailable = true;
+        _ffmpegChecked = true;
+        _lastFfmpegPath = ffmpegPath;
+        return true;
       }
 
-      return true;
+      string appDir = AppDomain.CurrentDomain.BaseDirectory;
+      string localFfmpeg = Path.Combine(appDir, "ffmpeg.exe");
+      if (File.Exists(localFfmpeg))
+      {
+        Logger.Info($"FFmpeg found in app directory: '{localFfmpeg}'");
+        settings.FfmpegPath = localFfmpeg;
+        SaveSettings();
+        _ffmpegAvailable = true;
+        _ffmpegChecked = true;
+        _lastFfmpegPath = localFfmpeg;
+        return true;
+      }
+
+      Logger.Warning($"FFmpeg not found at '{ffmpegPath}'");
+      _ffmpegAvailable = false;
+      _ffmpegChecked = true;
+      _lastFfmpegPath = ffmpegPath;
+
+      var result = MessageBox.Show(
+        "FFmpeg not found.\n\nWould you like to specify the path to ffmpeg.exe?",
+        "Missing FFmpeg",
+        MessageBoxButtons.YesNo,
+        MessageBoxIcon.Warning);
+
+      if (result == DialogResult.Yes)
+      {
+        using var dialog = new OpenFileDialog
+        {
+          Title = "Select ffmpeg.exe",
+          Filter = "Executable|ffmpeg.exe|All files|*.*"
+        };
+        if (dialog.ShowDialog() == DialogResult.OK)
+        {
+          settings.FfmpegPath = dialog.FileName;
+          SaveSettings();
+
+          _ffmpegChecked = false;
+          return CheckFFmpeg();
+        }
+        else
+        {
+          var download = MessageBox.Show(
+            "FFmpeg is required to run this application.\nDo you want to open the download page?",
+            "Download FFmpeg",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Information);
+          if (download == DialogResult.Yes)
+            Process.Start(new ProcessStartInfo(FfmpegDownloadUrl) { UseShellExecute = true });
+          return false;
+        }
+      }
+      else
+      {
+        var download = MessageBox.Show(
+          "FFmpeg is required to run this application.\nDo you want to open the download page?",
+          "Download FFmpeg",
+          MessageBoxButtons.YesNo,
+          MessageBoxIcon.Information);
+        if (download == DialogResult.Yes)
+          Process.Start(new ProcessStartInfo(FfmpegDownloadUrl) { UseShellExecute = true });
+        return false;
+      }
     }
 
     private static string GetAppDataFolder()
@@ -406,6 +451,9 @@ namespace DMF
           settings = new Settings();
       }
       catch { settings = new Settings(); }
+
+      _ffmpegChecked = false;
+      _lastFfmpegPath = null;
 
       ApplySettings();
     }
@@ -1218,6 +1266,7 @@ namespace DMF
 
       string file = files[0];
       if (!File.Exists(file)) return;
+      Logger.Info($"Input file selected via drag&drop: '{file}'");
 
       inputFile.Text = file;
       inputFile.ForeColor = SystemColors.WindowText;
@@ -1985,6 +2034,7 @@ namespace DMF
       file.Filter = "Media files|*.mp4;*.avi;*.mkv;*.mov;*.wmv;*.flv;*.webm|All files|*.*";
       if (file.ShowDialog() == DialogResult.OK)
       {
+        Logger.Info($"Input file selected via dialog: '{file.FileName}'");
         inputFile.Text = file.FileName;
         inputFile.ForeColor = SystemColors.WindowText;
 
@@ -2253,6 +2303,11 @@ namespace DMF
         }
       }
 
+      if (!string.IsNullOrEmpty(errorMessage))
+        Logger.Warning($"Parameter validation error: {errorMessage}");
+      if (!string.IsNullOrEmpty(warningMessage))
+        Logger.Warning($"Parameter validation warning: {warningMessage}");
+
       return true;
     }
 
@@ -2282,13 +2337,17 @@ namespace DMF
 
       if (!ValidateParameters(out string errorMessage, out string warningMessage))
       {
+        Logger.Warning($"Parameter validation error: {errorMessage}");
         MessageBox.Show(errorMessage, "Parameter conflict", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         status.Text = "Parameter conflict";
         return;
       }
 
       if (!string.IsNullOrEmpty(warningMessage))
+      {
+        Logger.Warning($"Parameter validation warning: {warningMessage}");
         status.Text = "Warning: " + warningMessage;
+      }
 
       string trimModeStr = trimMode.SelectedItem?.ToString() ?? "Source";
       TimeSpan start = TimeSpan.Zero;
@@ -2332,6 +2391,7 @@ namespace DMF
       status.Text = "Processing...";
 
       string fullCommand = "";
+      Logger.Info($"Encoding started: input '{inputFile.Text}', output '{outputFile.Text}'");
 
       try
       {
@@ -2441,6 +2501,7 @@ namespace DMF
 
         string args = string.Join(" ", argsList);
         fullCommand = $"\"{ffmpegPath}\" {args}";
+        Logger.Debug($"FFmpeg command: {fullCommand}");
 
         await RunFFmpeg(ffmpegPath, args, token, inputDuration, (percent, _) =>
         {
@@ -2456,6 +2517,7 @@ namespace DMF
         });
 
         status.Text = "Done!";
+        Logger.Info($"Encoding finished successfully: '{outputFile.Text}'");
         MessageBox.Show("Processing completed successfully!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
         if (openOnSuccess.Checked)
@@ -2463,17 +2525,21 @@ namespace DMF
       }
       catch (OperationCanceledException)
       {
+        Logger.Warning("Encoding cancelled by user");
         status.Text = "Cancelled";
         MessageBox.Show("Encoding cancelled.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
         if (!string.IsNullOrWhiteSpace(outputFile.Text) && File.Exists(outputFile.Text))
         {
           try { File.Delete(outputFile.Text); }
-          catch (Exception ex) { Debug.WriteLine($"Failed to delete incomplete file: {ex.Message}"); }
+          catch (Exception ex) { Logger.Error($"Failed to delete incomplete file: {ex.Message}"); }
         }
       }
       catch (Exception ex)
       {
+        Logger.Error($"Encoding failed: {ex.Message}");
+        Logger.Error($"Full command: {fullCommand}");
+
         string userMessage = ex.Message;
 
         if (userMessage.Contains("Invalid data found", StringComparison.OrdinalIgnoreCase))
@@ -2642,10 +2708,11 @@ namespace DMF
         {
           try
           {
+            Logger.Warning("Killing FFmpeg process due to cancellation");
             process.Kill();
             await process.WaitForExitAsync(cancellationToken);
           }
-          catch (Exception ex) { Debug.WriteLine($"Error killing process: {ex.Message}"); }
+          catch (Exception ex) { Logger.Error($"Error killing process: {ex.Message}"); }
         }
         throw new OperationCanceledException("Encoding cancelled.");
       }
@@ -2655,6 +2722,7 @@ namespace DMF
       if (process.ExitCode != 0)
       {
         string fullError = errorBuilder.ToString();
+        Logger.Error($"FFmpeg exited with code {process.ExitCode}. Full error:\n{fullError}");
         string relevant = ExtractRelevantError(fullError);
         throw new Exception(relevant);
       }
