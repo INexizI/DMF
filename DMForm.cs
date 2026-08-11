@@ -1815,7 +1815,7 @@ namespace DMF
 
       if (trimMode.SelectedItem?.ToString() == "Range" && !IsPlaceholder(startTime, TimePlaceholder))
       {
-        if (TimeSpan.TryParse(startTime.Text, out var startTs) && startTs.TotalSeconds > 0)
+        if (TimeSpan.TryParseExact(startTime.Text, @"h\:mm\:ss", CultureInfo.InvariantCulture, out var startTs) && startTs.TotalSeconds > 0)
           args.Add($"-ss {startTs:hh\\:mm\\:ss}");
       }
 
@@ -2356,13 +2356,15 @@ namespace DMF
       {
         if (IsPlaceholder(startTime, TimePlaceholder) || string.IsNullOrWhiteSpace(startTime.Text))
           start = TimeSpan.Zero;
-        else if (!TimeSpan.TryParse(startTime.Text, out start))
+        else if (!TimeSpan.TryParseExact(startTime.Text, @"h\:mm\:ss", CultureInfo.InvariantCulture, out start))
         {
           MessageBox.Show("Invalid start time. Use HH:MM:SS format.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
           return;
         }
 
-        if (IsPlaceholder(endTime, TimePlaceholder) || !TimeSpan.TryParse(endTime.Text, out TimeSpan endTs) || endTs.TotalSeconds <= 0)
+        if (IsPlaceholder(endTime, TimePlaceholder) ||
+          !TimeSpan.TryParseExact(endTime.Text, @"h\:mm\:ss", CultureInfo.InvariantCulture, out TimeSpan endTs) ||
+          endTs.TotalSeconds <= 0)
         {
           MessageBox.Show("Invalid end time. Use HH:MM:SS format and must be > 0.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
           return;
