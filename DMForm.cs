@@ -2507,7 +2507,7 @@ namespace DMF
 
         await RunFFmpeg(ffmpegPath, args, token, inputDuration, (percent, _) =>
         {
-          BeginInvoke(() =>
+          Invoke(() =>
           {
             if (percent > 0)
             {
@@ -2581,6 +2581,8 @@ namespace DMF
         progressBar.Style = ProgressBarStyle.Marquee;
         progressBar.Value = 0;
         progressBar.Visible = false;
+        status.Text = "Ready";
+        Application.DoEvents();
         UpdateProcessButton();
       }
     }
