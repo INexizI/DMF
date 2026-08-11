@@ -997,8 +997,8 @@ namespace DMF
       tableGif.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
       tabGif.Controls.Add(tableGif);
 
-      // Row 0: FPS
-      tableGif.Controls.Add(new Label { Text = "Frame rate:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 0);
+      // Row 0: Output FPS
+      tableGif.Controls.Add(new Label { Text = "Output FPS:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 0);
       gifFps = new NumericUpDown
       {
         Dock = DockStyle.Fill,
@@ -1008,7 +1008,7 @@ namespace DMF
         Increment = 1
       };
       tableGif.Controls.Add(gifFps, 1, 0);
-      tableGif.Controls.Add(new Label { Text = "frames per second", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 0);
+      tableGif.Controls.Add(new Label { Text = "0 = source FPS", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 0);
 
       // Row 1: Scale
       tableGif.Controls.Add(new Label { Text = "Scale:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 1);
@@ -1140,7 +1140,7 @@ namespace DMF
       };
       actionPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
       actionPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-      actionPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+      actionPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
       bottomLayout.Controls.Add(actionPanel, 0, 1);
 
       btnProcess = new Button
@@ -1191,7 +1191,12 @@ namespace DMF
 
       audioCodec.SelectedIndexChanged += (s, e) => { UpdateCodecHints(); UpdateControlStates(); };
       videoCodec.SelectedIndexChanged += (s, e) => { UpdateCodecHints(); UpdateControlStates(); };
-      videoBitrate.TextChanged += (s, e) => UpdateControlStates();
+      videoBitrate.TextChanged += (s, e) =>
+      {
+        if (!string.IsNullOrWhiteSpace(videoBitrate.Text))
+          crf.Value = 0;
+        UpdateControlStates();
+      };
       crf.ValueChanged += (s, e) => UpdateControlStates();
 
       UpdateTimeFields();
@@ -2143,6 +2148,114 @@ namespace DMF
       UpdateControlStates();
     }
 
+    private bool ValidateParameters(out string errorMessage, out string warningMessage)
+    {
+      errorMessage = string.Empty;
+      warningMessage = string.Empty;
+
+      string videoCodecSelected = videoCodec.SelectedItem?.ToString() ?? "copy";
+      string audioCodecSelected = audioCodec.SelectedItem?.ToString() ?? "copy";
+      string formatSelected = format.SelectedItem?.ToString() ?? "mp4";
+      bool audioOnlyChecked = audioOnly.Checked;
+      bool hasVideoFilter = !string.IsNullOrWhiteSpace(videoFilter.Text);
+
+      // 1. Conflict CRF / Video Bitrate
+      bool hasCrf = crf.Value > 0;
+      bool hasVideoBitrate = !string.IsNullOrWhiteSpace(videoBitrate.Text);
+      if (hasCrf && hasVideoBitrate)
+      {
+        errorMessage = "Both CRF and Video Bitrate are set.\n"
+                     + "FFmpeg will ignore CRF when bitrate is specified.\n"
+                     + "Clear the bitrate field to use CRF, or clear CRF to use bitrate.";
+        return false;
+      }
+
+      // 2. Filter + copy (warning)
+      if (hasVideoFilter && videoCodecSelected == "copy")
+      {
+        warningMessage = "Video filter is active, but codec is set to 'copy'.\n"
+                       + "The codec will be automatically switched to libx264 to apply the filter.";
+      }
+
+      // 3. Check format container and codec
+      if (formatSelected != "gif" && videoCodecSelected != "copy")
+      {
+        if (formatSelected == "mp4" && videoCodecSelected.Contains("vp9", StringComparison.OrdinalIgnoreCase))
+        {
+          errorMessage = "MP4 does not support VP9. Use WebM container for VP9, or switch to H.264/H.265.";
+          return false;
+        }
+        if (formatSelected == "webm" && (videoCodecSelected.Contains("h264", StringComparison.OrdinalIgnoreCase) ||
+                                         videoCodecSelected.Contains("h265", StringComparison.OrdinalIgnoreCase) ||
+                                         videoCodecSelected.Contains("hevc", StringComparison.OrdinalIgnoreCase)))
+        {
+          errorMessage = "WebM does not support H.264/H.265. Use VP9 or VP8 for WebM.";
+          return false;
+        }
+        if (formatSelected == "avi" && (videoCodecSelected.Contains("h265", StringComparison.OrdinalIgnoreCase) ||
+                                videoCodecSelected.Contains("hevc", StringComparison.OrdinalIgnoreCase) ||
+                                videoCodecSelected.Contains("x265", StringComparison.OrdinalIgnoreCase)))
+        {
+          errorMessage = "AVI container does not support HEVC (H.265). Use MKV or MP4 for H.265.";
+          return false;
+        }
+        if (formatSelected == "mov" && videoCodecSelected.Contains("libx265", StringComparison.OrdinalIgnoreCase))
+        {
+          errorMessage = "MOV container does not officially support H.265. Use MP4 or MKV for H.265.";
+          return false;
+        }
+      }
+
+      // 4. Check Audio
+      if (formatSelected == "mp3" && audioCodecSelected != "mp3" && audioCodecSelected != "libmp3lame" && audioCodecSelected != "copy")
+      {
+        warningMessage += (string.IsNullOrEmpty(warningMessage) ? "" : "\n")
+                        + "MP3 container usually contains MP3 audio. Consider selecting MP3 codec.";
+      }
+      if (formatSelected == "aac" && audioCodecSelected != "aac" && audioCodecSelected != "libfdk_aac" && audioCodecSelected != "copy")
+      {
+        warningMessage += (string.IsNullOrEmpty(warningMessage) ? "" : "\n")
+                        + "AAC container typically contains AAC audio. Consider selecting AAC codec.";
+      }
+      if (formatSelected == "flac" && audioCodecSelected != "flac" && audioCodecSelected != "copy")
+      {
+        warningMessage += (string.IsNullOrEmpty(warningMessage) ? "" : "\n")
+                        + "FLAC container expected FLAC audio. Consider selecting FLAC codec for lossless.";
+      }
+
+      // 5. GOP size
+      if (gop.Value > 0 && gop.Value < 10)
+      {
+        warningMessage += (string.IsNullOrEmpty(warningMessage) ? "" : "\n")
+                        + "Very small GOP size (<10) may reduce compression efficiency.";
+      }
+
+      // 6. Audio only + video codec
+      if (audioOnlyChecked && videoCodecSelected != "copy")
+      {
+        warningMessage += (string.IsNullOrEmpty(warningMessage) ? "" : "\n")
+                        + "Audio only mode is enabled, but video codec is not 'copy'. Video will be disabled (-vn).";
+      }
+
+      // 7. HW acceleration
+      string hwAccelSelected = hwAccel.SelectedItem?.ToString() ?? "none";
+      if (hwAccelSelected != "none" && videoCodecSelected != "copy")
+      {
+        bool isH264 = videoCodecSelected.Contains("h264", StringComparison.OrdinalIgnoreCase) ||
+                      videoCodecSelected.Contains("264", StringComparison.OrdinalIgnoreCase);
+        bool isH265 = videoCodecSelected.Contains("h265", StringComparison.OrdinalIgnoreCase) ||
+                      videoCodecSelected.Contains("hevc", StringComparison.OrdinalIgnoreCase);
+        if (!isH264 && !isH265)
+        {
+          warningMessage += (string.IsNullOrEmpty(warningMessage) ? "" : "\n")
+                          + "Hardware acceleration enabled, but selected codec may not support it.\n"
+                          + "H.264/H.265 are recommended for HW acceleration.";
+        }
+      }
+
+      return true;
+    }
+
     private async void BtnProcess_Click(object? sender, EventArgs e)
     {
       if (format == null) return;
@@ -2166,6 +2279,16 @@ namespace DMF
         MessageBox.Show("FFmpeg is not available. Please install it or specify the path.", "FFmpeg Missing", MessageBoxButtons.OK, MessageBoxIcon.Error);
         return;
       }
+
+      if (!ValidateParameters(out string errorMessage, out string warningMessage))
+      {
+        MessageBox.Show(errorMessage, "Parameter conflict", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        status.Text = "Parameter conflict";
+        return;
+      }
+
+      if (!string.IsNullOrEmpty(warningMessage))
+        status.Text = "Warning: " + warningMessage;
 
       string trimModeStr = trimMode.SelectedItem?.ToString() ?? "Source";
       TimeSpan start = TimeSpan.Zero;
@@ -2277,9 +2400,7 @@ namespace DMF
               argsList.Add($"-r {videoFps.Value}");
           }
           else if (!audioOnlyChecked && videoCodecSelected == "copy")
-          {
             argsList.Add($"-c:v {videoCodecSelected}");
-          }
 
           if (audioCodecSelected != "copy")
           {
@@ -2410,17 +2531,31 @@ namespace DMF
       var lines = fullError.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
       var errorLines = new List<string>();
 
+      var skipPhrases = new[]
+      {
+        "version", "built with", "configuration:", "Copyright", "libav", "gcc",
+        "x264 - core", "options:", "cabac", "ref=", "deblock", "analyse", "me=",
+        "psy", "mixed_ref", "trellis", "8x8dct", "fast_pskip", "chroma_qp_offset",
+        "threads=", "lookahead_threads", "sliced_threads", "nr=", "decimate",
+        "interlaced", "bluray_compat", "constrained_intra", "bframes",
+        "b_pyramid", "b_adapt", "b_bias", "direct", "weightb", "open_gop",
+        "weightp", "keyint", "scenecut", "intra_refresh", "rc_lookahead",
+        "rc=", "mbtree", "crf=", "qcomp", "qpmin", "qpmax", "qpstep",
+        "ip_ratio", "aq="
+      };
+
       foreach (var line in lines)
       {
-        if (line.Contains("version", StringComparison.OrdinalIgnoreCase) ||
-            line.Contains("built with", StringComparison.OrdinalIgnoreCase) ||
-            line.Contains("configuration:", StringComparison.OrdinalIgnoreCase) ||
-            line.Contains("Copyright", StringComparison.OrdinalIgnoreCase) ||
-            line.Contains("libav", StringComparison.OrdinalIgnoreCase) ||
-            line.Contains("gcc", StringComparison.OrdinalIgnoreCase))
+        bool skip = false;
+        foreach (var phrase in skipPhrases)
         {
-          continue;
+          if (line.Contains(phrase, StringComparison.OrdinalIgnoreCase))
+          {
+            skip = true;
+            break;
+          }
         }
+        if (skip) continue;
 
         if (line.Contains("Error", StringComparison.OrdinalIgnoreCase) ||
             line.Contains("Invalid", StringComparison.OrdinalIgnoreCase) ||
@@ -2435,7 +2570,10 @@ namespace DMF
             line.Contains("unsupported", StringComparison.OrdinalIgnoreCase) ||
             line.Contains("invalid", StringComparison.OrdinalIgnoreCase))
         {
-          errorLines.Add(line);
+          string cleaned = CleanErrorMessage().Replace(line, "");
+          cleaned = ReplaceErrorMessage().Replace(cleaned, " ").Trim();
+          if (!string.IsNullOrEmpty(cleaned))
+            errorLines.Add(cleaned);
         }
       }
 
@@ -2443,17 +2581,11 @@ namespace DMF
       {
         string first = errorLines.First();
         string last = errorLines.Last();
-        return first + (errorLines.Count > 1 ? "\n" + last : "");
+        return errorLines.Count == 1 ? first : first + "\n" + last;
       }
 
-      var firstLines = lines.Take(2).ToList();
-      var lastLine = lines.LastOrDefault();
-      if (lastLine != null && !string.IsNullOrEmpty(lastLine) && !firstLines.Contains(lastLine))
-      {
-        firstLines.Add("...");
-        firstLines.Add(lastLine);
-      }
-      return firstLines.Count > 0 ? string.Join("\n", firstLines) : "No error details available.";
+      var lastLines = lines.TakeLast(2).ToList();
+      return lastLines.Count > 0 ? string.Join("\n", lastLines) : "No error details available.";
     }
 
     private static async Task RunFFmpeg(string path, string args, CancellationToken cancellationToken, double totalDuration, Action<int, TimeSpan>? progressCallback = null)
@@ -2581,5 +2713,10 @@ namespace DMF
         return version;
       return new Version(0, 0, 0);
     }
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"\[[^\]]*@[^\]]*\]\s*")]
+    private static partial System.Text.RegularExpressions.Regex CleanErrorMessage();
+    [System.Text.RegularExpressions.GeneratedRegex(@"\s+")]
+    private static partial System.Text.RegularExpressions.Regex ReplaceErrorMessage();
   }
 }
