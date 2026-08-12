@@ -74,6 +74,8 @@ namespace DMF
     private ComboBox profile = null!;
     private NumericUpDown gop = null!;
     private NumericUpDown videoFps = null!;
+    private ComboBox colorMatrix = null!;
+    private ComboBox colorRange = null!;
     // Audio
     private TextBox audioBitrate = null!;
     private NumericUpDown audioQuality = null!;
@@ -141,12 +143,26 @@ namespace DMF
       { "pcm_s16le", "Uncompressed PCM\n(WAV-like)" },
       { "wav", "WAV\n(PCM 16-bit)" }
     };
+    private readonly Dictionary<string, string> colorMatrixDescriptions = new()
+    {
+      { "bt709", "BT.709 (HD, SDR)" },
+      { "bt470bg", "BT.470 BG (SD PAL)" },
+      { "smpte170m", "SMPTE 170M (SD NTSC)" },
+      { "bt2020nc", "BT.2020 NC (UHD, HDR)" },
+      { "bt2020c", "BT.2020 C (UHD, constant luminance)" },
+      { "ycgco", "Y'CgCo (color space)" }
+    };
+    private readonly Dictionary<string, string> colorRangeDescriptions = new()
+    {
+      { "limited", "Limited (TV range 16-235)" },
+      { "full", "Full (PC range 0-255)" }
+    };
 
     [Serializable]
     public class Settings
     {
       public int WinWidth { get; set; } = 800;
-      public int WinHeight { get; set; } = 450;
+      public int WinHeight { get; set; } = 500;
       public int WinX { get; set; } = -1;
       public int WinY { get; set; } = -1;
       public bool WinMax { get; set; } = false;
@@ -484,7 +500,7 @@ namespace DMF
 
       FormBorderStyle = FormBorderStyle.Sizable;
       MaximizeBox = true;
-      MinimumSize = new Size(800, 450);
+      MinimumSize = new Size(800, 500);
     }
 
     private void SaveSettings()
@@ -705,7 +721,7 @@ namespace DMF
       };
       tablePresets.Controls.Add(presetCombo, 1, 0);
 
-      // Row 1: Discription
+      // Row 1: Description
       tablePresets.Controls.Add(new Label { Text = "Description:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 1);
       var presetDescription = new Label
       {
@@ -713,8 +729,7 @@ namespace DMF
         TextAlign = ContentAlignment.MiddleLeft,
         ForeColor = Color.Gray,
         Font = new Font("Segoe UI", 9, FontStyle.Regular),
-        AutoSize = false,
-        Padding = new Padding(5)
+        AutoSize = false
       };
       tablePresets.Controls.Add(presetDescription, 1, 1);
 
@@ -750,7 +765,7 @@ namespace DMF
       {
         Dock = DockStyle.Fill,
         ColumnCount = 3,
-        RowCount = 10,
+        RowCount = 12,
         Padding = new Padding(10),
         AutoSize = false
       };
@@ -790,11 +805,41 @@ namespace DMF
       {
         Dock = DockStyle.Fill,
         DropDownStyle = ComboBoxStyle.DropDownList,
-        Items = { "yuv420p", "yuv422p", "yuv444p", "yuvj420p", "yuvj422p", "yuvj444p" },
+        Items =
+        {
+          "yuv420p",      // 8-bit, default
+          "yuv422p",      // 8-bit
+          "yuv444p",      // 8-bit
+          "yuvj420p",     // 8-bit, JPEG range
+          "yuvj422p",
+          "yuvj444p",
+          "yuv420p10le",  // 10-bit, little-endian
+          "yuv422p10le",
+          "yuv444p10le",
+          "yuv420p12le",  // 12-bit (optional!?)
+          "yuv422p12le",
+          "yuv444p12le"
+        },
         SelectedIndex = 0
       };
       tableVideo.Controls.Add(pixelFormat, 1, 2);
-      tableVideo.Controls.Add(new Label { Text = "compatibility", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 2);
+      var pixelHint = new Label
+      {
+        Text = "8-bit / 10-bit / 12-bit",
+        TextAlign = ContentAlignment.MiddleLeft,
+        Dock = DockStyle.Fill,
+        ForeColor = Color.Gray
+      };
+      tableVideo.Controls.Add(pixelHint, 2, 2);
+      toolTip.SetToolTip(pixelHint,
+        "Pixel format determines bit depth and chroma subsampling.\n" +
+        "• yuv420p  – 8-bit, 4:2:0 (most compatible)\n" +
+        "• yuv422p  – 8-bit, 4:2:2\n" +
+        "• yuv444p  – 8-bit, 4:4:4\n" +
+        "• yuv420p10le – 10-bit, 4:2:0 (required for BT.2020 HDR)\n" +
+        "• yuv422p10le – 10-bit, 4:2:2\n" +
+        "• yuv444p10le – 10-bit, 4:4:4\n" +
+        "• 12-bit formats – for high-end HDR/archival");
 
       // Row 3: Video bitrate
       tableVideo.Controls.Add(new Label { Text = "Bitrate (v):", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 3);
@@ -820,11 +865,28 @@ namespace DMF
       {
         Dock = DockStyle.Fill,
         DropDownStyle = ComboBoxStyle.DropDownList,
-        Items = { "baseline", "main", "high" },
-        SelectedIndex = 2
+        Items =
+        {
+          "baseline",   // H.264 only
+          "main",       // H.264 / H.265 (8-bit)
+          "high",       // H.264 only
+          "high10",     // H.264 10-bit
+          "high422",    // H.264 4:2:2
+          "high444",    // H.264 4:4:4
+          "main10",     // H.265 10-bit
+          "main422-10", // H.265 4:2:2 10-bit
+          "main444-10"  // H.265 4:4:4 10-bit
+        },
+        SelectedIndex = 1
       };
       tableVideo.Controls.Add(profile, 1, 6);
-      tableVideo.Controls.Add(new Label { Text = "H.264/H.265 only", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 6);
+      tableVideo.Controls.Add(new Label
+      {
+        Text = "check compatibility\nwith codec/bit depth",
+        TextAlign = ContentAlignment.MiddleLeft,
+        Dock = DockStyle.Fill,
+        ForeColor = Color.Gray
+      }, 2, 6);
 
       // Row 7: GOP size
       tableVideo.Controls.Add(new Label { Text = "GOP size:", Padding = new Padding(0, 4, 0, 0), TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Top }, 0, 7);
@@ -851,6 +913,58 @@ namespace DMF
       };
       tableVideo.Controls.Add(videoFps, 1, 8);
       tableVideo.Controls.Add(new Label { Text = "0 = source FPS", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 8);
+
+      // Row 9: Color Matrix
+      tableVideo.Controls.Add(new Label { Text = "Color matrix:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 9);
+      colorMatrix = new ComboBox
+      {
+        Dock = DockStyle.Fill,
+        DropDownStyle = ComboBoxStyle.DropDownList
+      };
+      colorMatrix.Items.AddRange(colorMatrixDescriptions.Keys.Cast<object>().ToArray());
+      colorMatrix.SelectedIndex = 0;
+      tableVideo.Controls.Add(colorMatrix, 1, 9);
+      var matrixHint = new Label
+      {
+        Text = "color space metadata",
+        TextAlign = ContentAlignment.MiddleLeft,
+        Dock = DockStyle.Fill,
+        ForeColor = Color.Gray
+      };
+      tableVideo.Controls.Add(matrixHint, 2, 9);
+      toolTip.SetToolTip(matrixHint,
+        "Defines the color matrix (color space) for the output video.\n" +
+        "• bt709 – HD/SDR (default)\n" +
+        "• bt470bg – SD PAL\n" +
+        "• smpte170m – SD NTSC\n" +
+        "• bt2020nc – UHD HDR (BT.2020 non-constant)\n" +
+        "• bt2020c – UHD HDR (constant luminance)\n" +
+        "• ycgco – Y'CgCo\n\n" +
+        "Not all codecs support all matrices. Use with appropriate codecs.");
+
+      // Row 10: Color Range
+      tableVideo.Controls.Add(new Label { Text = "Color range:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 10);
+      colorRange = new ComboBox
+      {
+        Dock = DockStyle.Fill,
+        DropDownStyle = ComboBoxStyle.DropDownList
+      };
+      colorRange.Items.AddRange(colorRangeDescriptions.Keys.Cast<object>().ToArray());
+      colorRange.SelectedIndex = 0;
+      tableVideo.Controls.Add(colorRange, 1, 10);
+      var rangeHint = new Label
+      {
+        Text = "luma range metadata",
+        TextAlign = ContentAlignment.MiddleLeft,
+        Dock = DockStyle.Fill,
+        ForeColor = Color.Gray
+      };
+      tableVideo.Controls.Add(rangeHint, 2, 10);
+      toolTip.SetToolTip(rangeHint,
+        "Defines the luma range (limited vs full).\n" +
+        "• limited – TV range (16-235) – typical for broadcast\n" +
+        "• full – PC range (0-255) – typical for computer monitors\n\n" +
+        "Set according to your target display.");
 
       /* Audio */
       var tabAudio = new TabPage("Audio");
@@ -1423,6 +1537,8 @@ namespace DMF
         profile.Enabled = false;
         gop.Enabled = false;
         videoFps.Enabled = false;
+        colorMatrix.Enabled = false;
+        colorRange.Enabled = false;
         audioCodec.Enabled = false;
         audioBitrate.Enabled = false;
         audioQuality.Enabled = false;
@@ -1475,6 +1591,8 @@ namespace DMF
       profile.Enabled = encodingEnabled;
       gop.Enabled = encodingEnabled;
       videoFps.Enabled = encodingEnabled;
+      colorMatrix.Enabled = encodingEnabled;
+      colorRange.Enabled = encodingEnabled;
       videoFilter.Enabled = videoEnabled;
 
       // ------ Audio controls ------
@@ -1614,9 +1732,12 @@ namespace DMF
         PresetWeb => "H.264 / AAC, MP4, CRF 23, medium preset.\nGood quality for web streaming.",
         PresetHD => "H.264 High Profile, MP4, CRF 18, slow preset.\nHigh quality for HD content.",
         PresetMobile => "H.264 Baseline, MP4, CRF 25, veryfast preset, low bitrate.\nOptimized for mobile devices.",
-        PresetLossless => "H.264 lossless (CRF 0), FLAC audio, MKV.\nVisually lossless, large file size.",
+        PresetLossless => "H.264 lossless (CRF 0), FLAC audio, MKV.\n" +
+                          "4:4:4 color, high444 profile for maximum quality.\n" +
+                          "Note: Windows thumbnails may not be generated for this format.",
         Preset2K => "H.264 High Profile, MP4, CRF 18, 12 Mbps, 30 fps, 2560x1440.\nHigh quality for 2K (QHD) content.",
-        Preset4K => "H.265 (HEVC), MP4, CRF 20, 25 Mbps, 30 fps, 3840x2160.\nHigh quality for 4K (UHD) content.",
+        Preset4K => "H.265 (HEVC), MP4, CRF 20, 25 Mbps, 30 fps, 3840x2160.\n" +
+                    "BT.2020, 10-bit (main10 profile), limited range.",
         PresetGif => "GIF with 30 fps, scaled to 640px width, palette generation with Bayer dithering.",
         _ => ""
       };
@@ -1639,6 +1760,9 @@ namespace DMF
           maxrate.Text = "";
           bufsize.Text = "";
           gop.Value = 0;
+          colorMatrix.SelectedItem = "bt709";
+          colorRange.SelectedItem = "limited";
+          pixelFormat.SelectedItem = "yuv420p";
           audioOnly.Checked = false;
           break;
 
@@ -1655,6 +1779,9 @@ namespace DMF
           maxrate.Text = "";
           bufsize.Text = "";
           gop.Value = 0;
+          colorMatrix.SelectedItem = "bt709";
+          colorRange.SelectedItem = "limited";
+          pixelFormat.SelectedItem = "yuv420p";
           audioOnly.Checked = false;
           break;
 
@@ -1671,6 +1798,9 @@ namespace DMF
           maxrate.Text = "";
           bufsize.Text = "";
           gop.Value = 0;
+          colorMatrix.SelectedItem = "bt709";
+          colorRange.SelectedItem = "limited";
+          pixelFormat.SelectedItem = "yuv420p";
           audioOnly.Checked = false;
           break;
 
@@ -1681,12 +1811,15 @@ namespace DMF
           crf.Value = 0;
           preset.SelectedItem = "ultrafast";
           pixelFormat.SelectedItem = "yuv444p";
-          profile.SelectedItem = "high";
+          profile.SelectedItem = "high444";
           videoBitrate.Text = "";
           audioBitrate.Text = "";
           maxrate.Text = "";
           bufsize.Text = "";
           gop.Value = 0;
+          colorMatrix.SelectedItem = "bt709";
+          colorRange.SelectedItem = "limited";
+          pixelFormat.SelectedItem = "yuv444p";
           audioOnly.Checked = false;
           break;
 
@@ -1704,6 +1837,9 @@ namespace DMF
           bufsize.Text = "24M";
           gop.Value = 0;
           videoFps.Value = 30;
+          colorMatrix.SelectedItem = "bt709";
+          colorRange.SelectedItem = "limited";
+          pixelFormat.SelectedItem = "yuv420p";
           videoFilter.Text = "scale=2560:-2";
           audioOnly.Checked = false;
           break;
@@ -1714,14 +1850,16 @@ namespace DMF
           audioCodec.SelectedItem = "aac";
           crf.Value = 20;
           preset.SelectedItem = "medium";
-          pixelFormat.SelectedItem = "yuv420p";
-          profile.SelectedItem = "main";
+          pixelFormat.SelectedItem = "yuv420p10le";
+          profile.SelectedItem = "main10";
           videoBitrate.Text = "25M";
           audioBitrate.Text = "256k";
           maxrate.Text = "35M";
           bufsize.Text = "50M";
           gop.Value = 0;
           videoFps.Value = 30;
+          colorMatrix.SelectedItem = "bt2020nc";
+          colorRange.SelectedItem = "limited";
           videoFilter.Text = "scale=3840:-2";
           audioOnly.Checked = false;
           break;
@@ -2303,6 +2441,131 @@ namespace DMF
         }
       }
 
+      // 8. Check color params
+      if (videoCodecSelected != "copy")
+      {
+        string matrix = colorMatrix.SelectedItem?.ToString() ?? "bt709";
+        string range = colorRange.SelectedItem?.ToString() ?? "limited";
+
+        if (videoCodecSelected.Contains("mpeg4", StringComparison.OrdinalIgnoreCase) ||
+            videoCodecSelected.Contains("libxvid", StringComparison.OrdinalIgnoreCase) ||
+            videoCodecSelected.Contains("mpeg2video", StringComparison.OrdinalIgnoreCase))
+        {
+          if (matrix.Contains("bt2020", StringComparison.OrdinalIgnoreCase))
+          {
+            string pixFmt = pixelFormat.SelectedItem?.ToString() ?? "yuv420p";
+            if (!pixFmt.Contains("10le", StringComparison.OrdinalIgnoreCase) &&
+                !pixFmt.Contains("p10", StringComparison.OrdinalIgnoreCase))
+            {
+              errorMessage = "BT.2020 color matrix requires a 10-bit pixel format (e.g., yuv420p10le, yuv422p10le, yuv444p10le).\n"
+                           + "Please select a 10-bit pixel format in the Video tab.";
+              return false;
+            }
+          }
+        }
+
+        if (videoCodecSelected.Contains("libvpx", StringComparison.OrdinalIgnoreCase) ||
+            videoCodecSelected.Contains("libaom-av1", StringComparison.OrdinalIgnoreCase))
+        {
+          if (matrix.Contains("bt2020", StringComparison.OrdinalIgnoreCase) &&
+              !videoCodecSelected.Contains("libaom-av1", StringComparison.OrdinalIgnoreCase))
+            warningMessage += (string.IsNullOrEmpty(warningMessage) ? "" : "\n")
+                            + "VP9 may not fully support BT.2020 with all FFmpeg builds. Consider using AV1 or H.265 for HDR.";
+        }
+
+        if (range == "full" && matrix.Contains("bt709", StringComparison.OrdinalIgnoreCase))
+          warningMessage += (string.IsNullOrEmpty(warningMessage) ? "" : "\n")
+                          + "Full range with BT.709 is unusual. Ensure your playback chain supports full range.";
+      }
+      else
+      {
+        if (colorMatrix.SelectedIndex != 0 || colorRange.SelectedIndex != 0)
+          warningMessage += (string.IsNullOrEmpty(warningMessage) ? "" : "\n")
+                          + "Color matrix and range are ignored when video codec is 'copy'. They will not be applied.";
+      }
+
+      // 9. Checking BT.2020 and pixel format
+      if (videoCodecSelected != "copy")
+      {
+        string matrix = colorMatrix.SelectedItem?.ToString() ?? "bt709";
+        if (matrix.Contains("bt2020", StringComparison.OrdinalIgnoreCase))
+        {
+          string pixFmt = pixelFormat.SelectedItem?.ToString() ?? "yuv420p";
+          if (!pixFmt.Contains("10le", StringComparison.OrdinalIgnoreCase) &&
+              !pixFmt.Contains("p10", StringComparison.OrdinalIgnoreCase))
+          {
+            errorMessage = "BT.2020 color matrix requires a 10-bit pixel format (e.g., yuv420p10le, yuv422p10le, yuv444p10le).\n"
+                         + "Please select a 10-bit pixel format in the Video tab.";
+            return false;
+          }
+        }
+      }
+
+      // 10. Check profile / bit
+      if (videoCodecSelected != "copy")
+      {
+        string selectedProfile = profile.SelectedItem?.ToString() ?? "";
+        string selectedPixFmt = pixelFormat.SelectedItem?.ToString() ?? "yuv420p";
+        bool is10Bit = selectedPixFmt.Contains("10le") || selectedPixFmt.Contains("p10");
+        bool is12Bit = selectedPixFmt.Contains("12le") || selectedPixFmt.Contains("p12");
+
+        if (videoCodecSelected.Contains("libx264", StringComparison.OrdinalIgnoreCase) ||
+            videoCodecSelected.Contains("h264", StringComparison.OrdinalIgnoreCase))
+        {
+          if (is10Bit || is12Bit)
+          {
+            if (selectedProfile != "high10" && selectedProfile != "high422" && selectedProfile != "high444")
+            {
+              errorMessage = $"10-bit pixel format requires a 10-bit H.264 profile (high10, high422, or high444).\nCurrent profile: {selectedProfile}";
+              return false;
+            }
+          }
+          else
+          {
+            if (!new[] { "baseline", "main", "high" }.Contains(selectedProfile))
+              warningMessage += (string.IsNullOrEmpty(warningMessage) ? "" : "\n")
+                              + $"Profile '{selectedProfile}' may not be supported for 8-bit H.264. Consider using 'high'.";
+          }
+        }
+        else if (videoCodecSelected.Contains("libx265", StringComparison.OrdinalIgnoreCase) ||
+                 videoCodecSelected.Contains("hevc", StringComparison.OrdinalIgnoreCase))
+        {
+          if (is10Bit || is12Bit)
+          {
+            if (selectedProfile != "main10" && selectedProfile != "main422-10" && selectedProfile != "main444-10")
+            {
+              errorMessage = $"10-bit pixel format requires a 10-bit H.265 profile (main10, main422-10, or main444-10).\nCurrent profile: {selectedProfile}";
+              return false;
+            }
+          }
+          else
+          {
+            if (selectedProfile != "main" && selectedProfile != "main10" && selectedProfile != "main422-10" && selectedProfile != "main444-10")
+              warningMessage += (string.IsNullOrEmpty(warningMessage) ? "" : "\n")
+                              + $"Profile '{selectedProfile}' is not typical for 8-bit H.265. Consider using 'main'.";
+          }
+        }
+      }
+
+      // 11. Check lossless + profile
+      if (videoCodecSelected == "libx264" && crf.Value == 0)
+      {
+        string selectedPixFmt = pixelFormat.SelectedItem?.ToString() ?? "yuv420p";
+        string selectedProfile = profile.SelectedItem?.ToString() ?? "";
+
+        if (selectedPixFmt.Contains("444", StringComparison.OrdinalIgnoreCase) ||
+            selectedPixFmt.Contains("422", StringComparison.OrdinalIgnoreCase))
+        {
+          if (selectedProfile != "high444" && selectedProfile != "high422" && selectedProfile != "high10")
+          {
+            errorMessage = "Lossless (CRF 0) with 4:2:2 or 4:4:4 requires a suitable profile.\n" +
+                           "For 4:4:4 use 'high444', for 4:2:2 use 'high422' or 'high10'.\n" +
+                           "Current profile: " + selectedProfile;
+            return false;
+          }
+        }
+      }
+
       if (!string.IsNullOrEmpty(errorMessage))
         Logger.Warning($"Parameter validation error: {errorMessage}");
       if (!string.IsNullOrEmpty(warningMessage))
@@ -2460,6 +2723,14 @@ namespace DMF
 
             if (videoFps.Value > 0)
               argsList.Add($"-r {videoFps.Value}");
+
+            string matrix = colorMatrix.SelectedItem?.ToString() ?? "";
+            if (!string.IsNullOrEmpty(matrix) && matrix != "bt709")
+              argsList.Add($"-colorspace {matrix}");
+
+            string range = colorRange.SelectedItem?.ToString() ?? "";
+            if (!string.IsNullOrEmpty(range) && range != "limited")
+              argsList.Add($"-color_range {range}");
           }
           else if (!audioOnlyChecked && videoCodecSelected == "copy")
             argsList.Add($"-c:v {videoCodecSelected}");
@@ -2530,12 +2801,7 @@ namespace DMF
         Logger.Warning("Encoding cancelled by user");
         status.Text = "Cancelled";
         MessageBox.Show("Encoding cancelled.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
-
-        if (!string.IsNullOrWhiteSpace(outputFile.Text) && File.Exists(outputFile.Text))
-        {
-          try { File.Delete(outputFile.Text); }
-          catch (Exception ex) { Logger.Error($"Failed to delete incomplete file: {ex.Message}"); }
-        }
+        DeleteIncompleteOutput();
       }
       catch (Exception ex)
       {
@@ -2569,6 +2835,7 @@ namespace DMF
 
         status.Text = "Error";
         MessageBox.Show(userMessage, "FFmpeg Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        DeleteIncompleteOutput();
       }
       finally
       {
@@ -2729,6 +2996,22 @@ namespace DMF
         Logger.Error($"FFmpeg exited with code {process.ExitCode}. Full error:\n{fullError}");
         string relevant = ExtractRelevantError(fullError);
         throw new Exception(relevant);
+      }
+    }
+
+    private void DeleteIncompleteOutput()
+    {
+      if (!string.IsNullOrWhiteSpace(outputFile.Text) && File.Exists(outputFile.Text))
+      {
+        try
+        {
+          File.Delete(outputFile.Text);
+          Logger.Debug($"Deleted incomplete output file: '{outputFile.Text}'");
+        }
+        catch (Exception ex)
+        {
+          Logger.Error($"Failed to delete incomplete file: {ex.Message}");
+        }
       }
     }
 
