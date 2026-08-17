@@ -785,7 +785,12 @@ namespace DMF
         Increment = 1
       };
       tableVideo.Controls.Add(crf, 1, 0);
-      tableVideo.Controls.Add(new Label { Text = "0–51 (lower = better)", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 0);
+      var crfHint = new Label { Text = "0–51 (lower = better)", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray };
+      tableVideo.Controls.Add(crfHint, 2, 0);
+      toolTip.SetToolTip(crfHint,
+        "Quality control parameter.\n" +
+        "For software codecs (libx264, libx265): CRF (0–51, lower = better).\n" +
+        "For hardware codecs (NVENC, AMF, QSV): CQ/NVENC or QP/AMF-QSV (0–51, lower = better).");
 
       // Row 1: Preset
       tableVideo.Controls.Add(new Label { Text = "Preset:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 1);
@@ -1164,9 +1169,9 @@ namespace DMF
       gifFps = new NumericUpDown
       {
         Dock = DockStyle.Fill,
-        Minimum = 1,
+        Minimum = 0,
         Maximum = 60,
-        Value = 30,
+        Value = 0,
         Increment = 1
       };
       tableGif.Controls.Add(gifFps, 1, 0);
@@ -2346,6 +2351,9 @@ namespace DMF
       string formatSelected = format.SelectedItem?.ToString() ?? "mp4";
       bool audioOnlyChecked = audioOnly.Checked;
       bool hasVideoFilter = !string.IsNullOrWhiteSpace(videoFilter.Text);
+      bool isHardwareCodec = videoCodecSelected.Contains("nvenc") ||
+                             videoCodecSelected.Contains("amf") ||
+                             videoCodecSelected.Contains("qsv");
 
       // 1. Conflict CRF / Video Bitrate
       bool hasCrf = crf.Value > 0;
@@ -2358,7 +2366,7 @@ namespace DMF
         return false;
       }
 
-      // 2. Filter + copy (warning)
+      // 2. Warning: Filter + copy
       if (hasVideoFilter && videoCodecSelected == "copy")
       {
         warningMessage = "Video filter is active, but codec is set to 'copy'.\n"
@@ -2484,7 +2492,7 @@ namespace DMF
                           + "Color matrix and range are ignored when video codec is 'copy'. They will not be applied.";
       }
 
-      // 9. Checking BT.2020 and pixel format
+      // 9. Check BT.2020 and pixel format
       if (videoCodecSelected != "copy")
       {
         string matrix = colorMatrix.SelectedItem?.ToString() ?? "bt709";
@@ -2566,6 +2574,90 @@ namespace DMF
         }
       }
 
+      // 12. Block 10-bit for libx264
+      if (videoCodecSelected.Contains("libx264", StringComparison.OrdinalIgnoreCase) ||
+          videoCodecSelected.Contains("h264", StringComparison.OrdinalIgnoreCase))
+      {
+        string pixFmt = pixelFormat.SelectedItem?.ToString() ?? "yuv420p";
+        if (pixFmt.Contains("10le", StringComparison.OrdinalIgnoreCase) ||
+            pixFmt.Contains("12le", StringComparison.OrdinalIgnoreCase))
+        {
+          errorMessage = "libx264 (software H.264) does not support 10-bit or 12-bit pixel formats.\n"
+                       + "Use 8-bit formats (e.g., yuv420p, yuv422p, yuv444p).\n"
+                       + "For 10-bit H.264, consider using hardware encoder (h264_nvenc) or libx265.";
+          return false;
+        }
+      }
+
+      // 13. Warning: HW Accel + software codec
+      if (hwAccel.SelectedItem?.ToString() != "none")
+      {
+        if (!isHardwareCodec && videoCodecSelected != "copy")
+        {
+          warningMessage += (string.IsNullOrEmpty(warningMessage) ? "" : "\n")
+                          + "Hardware acceleration (decoding) is enabled, but the selected video codec is software-based.\n"
+                          + "This is allowed, but -hwaccel_output_format will be ignored to avoid conversion errors.";
+        }
+      }
+
+      // 14. Warning: CRF for hardware codecs
+      if (isHardwareCodec && crf.Value > 0 && videoCodecSelected != "copy")
+      {
+        warningMessage += (string.IsNullOrEmpty(warningMessage) ? "" : "\n")
+                        + $"The selected codec ({videoCodecSelected}) uses {(videoCodecSelected.Contains("nvenc") ? "CQ" : "QP")} instead of CRF.\n"
+                        + "The value from CRF field will be used as quality parameter.";
+      }
+
+      // 15. Check pixel format for hardware codecs
+      if (isHardwareCodec)
+      {
+        string pixFmt = pixelFormat.SelectedItem?.ToString() ?? "yuv420p";
+        if (pixFmt.Contains("12le", StringComparison.OrdinalIgnoreCase))
+        {
+          errorMessage = "Hardware encoders (NVENC, AMF, QSV) do not support 12-bit pixel formats.\n"
+                       + "Please select an 8-bit or 10-bit format.";
+          return false;
+        }
+        if (pixFmt.Contains("10le", StringComparison.OrdinalIgnoreCase))
+        {
+          if (videoCodecSelected.Contains("nvenc") || videoCodecSelected.Contains("amf"))
+            warningMessage += (string.IsNullOrEmpty(warningMessage) ? "" : "\n")
+                            + $"Pixel format '{pixFmt}' will be automatically converted to 'p010le' for hardware encoding.";
+        }
+      }
+
+      // 16. Warning: experemental audiocodecs
+      if (audioCodecSelected == "opus" || audioCodecSelected == "libfdk_aac")
+      {
+        warningMessage += (string.IsNullOrEmpty(warningMessage) ? "" : "\n")
+                        + $"Codec '{audioCodecSelected}' may be experimental in your FFmpeg build.\n"
+                        + "The '-strict -2' flag will be added automatically.";
+      }
+
+      // 17. Warning: HWAccel + color matrix
+      if (hwAccelSelected != "none" && videoCodecSelected != "copy")
+      {
+        bool hasColorParams = !string.IsNullOrWhiteSpace(colorMatrix.SelectedItem?.ToString()) &&
+                              colorMatrix.SelectedItem?.ToString() != "bt709";
+        bool hasColorRange = !string.IsNullOrWhiteSpace(colorRange.SelectedItem?.ToString()) &&
+                             colorRange.SelectedItem?.ToString() != "limited";
+
+        if (hasColorParams || hasColorRange || hasVideoFilter)
+        {
+          warningMessage += (string.IsNullOrEmpty(warningMessage) ? "" : "\n")
+                          + "Hardware acceleration (decoding) is enabled, but color parameters or filters are used.\n"
+                          + "The output format of hardware decoder will be switched to CPU format to allow processing.\n"
+                          + "This may reduce performance but ensures correct color/filter application.";
+        }
+      }
+
+      // 18. Warning: preset doesnt support AMF and QSV
+      if (videoCodecSelected.Contains("amf") || videoCodecSelected.Contains("qsv"))
+      {
+        warningMessage += (string.IsNullOrEmpty(warningMessage) ? "" : "\n")
+                        + $"Codec '{videoCodecSelected}' does not support preset parameter. It will be ignored.";
+      }
+
       if (!string.IsNullOrEmpty(errorMessage))
         Logger.Warning($"Parameter validation error: {errorMessage}");
       if (!string.IsNullOrEmpty(warningMessage))
@@ -2643,6 +2735,9 @@ namespace DMF
       string formatStr = format.SelectedItem?.ToString() ?? "";
       bool isGif = formatStr.Equals("gif", StringComparison.OrdinalIgnoreCase);
 
+      string videoCodecSelected = videoCodec.SelectedItem?.ToString() ?? "copy";
+      string audioCodecSelected = audioCodec.SelectedItem?.ToString() ?? "copy";
+
       _cancellationTokenSource = new CancellationTokenSource();
       var token = _cancellationTokenSource.Token;
 
@@ -2666,6 +2761,28 @@ namespace DMF
         if (overwrite.Checked)
           argsList.Add("-y");
 
+        string hw = hwAccel.SelectedItem?.ToString() ?? "none";
+        string hwOut = hwAccelOutput.SelectedItem?.ToString() ?? "";
+
+        bool isHardwareCodec = videoCodecSelected.Contains("nvenc") ||
+                               videoCodecSelected.Contains("amf") ||
+                               videoCodecSelected.Contains("qsv");
+
+        bool hasColorParams = !string.IsNullOrWhiteSpace(colorMatrix.SelectedItem?.ToString()) &&
+                              colorMatrix.SelectedItem?.ToString() != "bt709";
+        bool hasColorRange = !string.IsNullOrWhiteSpace(colorRange.SelectedItem?.ToString()) &&
+                             colorRange.SelectedItem?.ToString() != "limited";
+        bool hasVideoFilter = !string.IsNullOrWhiteSpace(videoFilter.Text);
+
+        bool useHwOutputFormat = isHardwareCodec && !hasColorParams && !hasColorRange && !hasVideoFilter;
+
+        if (hw != "none")
+        {
+          argsList.Add($"-hwaccel {hw}");
+          if (!string.IsNullOrEmpty(hwOut) && hwOut != "none" && useHwOutputFormat)
+            argsList.Add($"-hwaccel_output_format {hwOut}");
+        }
+
         if (trimModeStr == "Range")
         {
           if (start.TotalSeconds > 0)
@@ -2683,11 +2800,7 @@ namespace DMF
         }
         else
         {
-          string audioCodecSelected = audioCodec.SelectedItem?.ToString() ?? "copy";
-          string videoCodecSelected = videoCodec.SelectedItem?.ToString() ?? "copy";
           bool audioOnlyChecked = audioOnly.Checked;
-
-          bool hasVideoFilter = !string.IsNullOrWhiteSpace(videoFilter.Text);
 
           if (hasVideoFilter && videoCodecSelected == "copy")
             videoCodecSelected = "libx264";
@@ -2696,13 +2809,55 @@ namespace DMF
           {
             argsList.Add($"-c:v {videoCodecSelected}");
 
-            if (crf.Value > 0)
-              argsList.Add($"-crf {crf.Value}");
+            if (isHardwareCodec)
+            {
+              if (videoCodecSelected.Contains("nvenc") && crf.Value > 0)
+                argsList.Add($"-cq {crf.Value}");
+              else if ((videoCodecSelected.Contains("amf") || videoCodecSelected.Contains("qsv")) && crf.Value > 0)
+                argsList.Add($"-qp {crf.Value}");
+            }
+            else
+            {
+              if (crf.Value > 0)
+                argsList.Add($"-crf {crf.Value}");
+            }
 
-            string presetVal = preset.SelectedItem?.ToString() ?? "medium";
-            argsList.Add($"-preset {presetVal}");
+            bool supportsPreset = !videoCodecSelected.Contains("amf") && !videoCodecSelected.Contains("qsv");
+            if (supportsPreset && videoCodecSelected != "copy")
+            {
+              string presetVal = preset.SelectedItem?.ToString() ?? "medium";
+              argsList.Add($"-preset {presetVal}");
+            }
+            else if (videoCodecSelected.Contains("amf"))
+            {
+              string presetVal = preset.SelectedItem?.ToString() ?? "medium";
+              string amfQuality = presetVal switch
+              {
+                "ultrafast" or "superfast" or "veryfast" or "faster" => "speed",
+                "fast" or "medium" or "slow" => "balanced",
+                "slower" or "veryslow" => "quality",
+                _ => "balanced"
+              };
+              argsList.Add($"-quality {amfQuality}");
+            }
 
             string pixFmt = pixelFormat.SelectedItem?.ToString() ?? "yuv420p";
+            if (isHardwareCodec)
+            {
+              if (pixFmt.Contains("10le", StringComparison.OrdinalIgnoreCase))
+              {
+                if (videoCodecSelected.Contains("nvenc") || videoCodecSelected.Contains("amf"))
+                {
+                  pixFmt = "p010le";
+                  Logger.Debug($"Pixel format automatically changed to '{pixFmt}' for hardware encoder");
+                }
+              }
+              else if (pixFmt.Contains("12le", StringComparison.OrdinalIgnoreCase))
+              {
+                pixFmt = "p010le";
+                Logger.Warning($"12-bit format not supported by hardware encoder, falling back to 'p010le'");
+              }
+            }
             argsList.Add($"-pix_fmt {pixFmt}");
 
             if (!string.IsNullOrWhiteSpace(videoBitrate.Text))
@@ -2742,11 +2897,11 @@ namespace DMF
               argsList.Add($"-b:a {audioBitrate.Text.Trim()}");
             if (audioQuality.Value > 0)
               argsList.Add($"-aq {audioQuality.Value}");
+            if (audioCodecSelected == "opus" || audioCodecSelected == "libfdk_aac")
+              argsList.Add("-strict -2");
           }
           else
-          {
             argsList.Add($"-c:a {audioCodecSelected}");
-          }
 
           if (audioOnlyChecked)
             argsList.Add("-vn");
@@ -2759,15 +2914,6 @@ namespace DMF
 
           if (!string.IsNullOrWhiteSpace(mapStreams.Text))
             argsList.Add($"-map {mapStreams.Text.Trim()}");
-
-          string hw = hwAccel.SelectedItem?.ToString() ?? "none";
-          if (hw != "none")
-          {
-            argsList.Add($"-hwaccel {hw}");
-            string hwOut = hwAccelOutput.SelectedItem?.ToString() ?? "";
-            if (!string.IsNullOrEmpty(hwOut))
-              argsList.Add($"-hwaccel_output_format {hwOut}");
-          }
         }
 
         argsList.Add($"\"{outputFile.Text}\"");
