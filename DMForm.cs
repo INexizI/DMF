@@ -3468,9 +3468,30 @@ namespace DMF
       }
     }
 
-
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
+      if (_cancellationTokenSource != null)
+      {
+        var result = MessageBox.Show(
+          "A conversion process is currently running.\n\nDo you want to cancel it and exit?",
+          "Process Running",
+          MessageBoxButtons.YesNo,
+          MessageBoxIcon.Warning,
+          MessageBoxDefaultButton.Button2);
+
+        if (result == DialogResult.No)
+        {
+          e.Cancel = true;
+          return;
+        }
+        else
+        {
+          _cancellationTokenSource.Cancel();
+          Application.DoEvents();
+          Thread.Sleep(300);
+        }
+      }
+
       if (!string.IsNullOrEmpty(previewTempFile) && File.Exists(previewTempFile))
       {
         try { File.Delete(previewTempFile); }
