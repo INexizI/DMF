@@ -109,6 +109,18 @@ namespace DMF
     private bool _ffmpegAvailable = false;
     private bool _ffmpegChecked = false;
     private string? _lastFfmpegPath = null;
+    private string _ffmpegVersion = "Checking...";
+    private string _ffprobeVersion = "Checking...";
+    // Info
+    private Label dmfVersion = null!;
+    private Label ffmpegVersion = null!;
+    private Label ffprobeVersion = null!;
+    private Label ffmpegPath = null!;
+    private Label ffprobePath = null!;
+    private Label settingsPathLabel = null!;
+    private Label logPathLabel = null!;
+    private Label dotNetVersion = null!;
+    private Label osVersion = null!;
 
     private readonly Dictionary<string, string> videoCodecDescriptions = new()
     {
@@ -222,6 +234,7 @@ namespace DMF
       LoadSettings();
       InitializeForm();
       InitializeLayout();
+      _ = UpdateInfoTabAsync();
       openOnSuccess.Checked = settings.OpenOnSuccess;
       UpdateProcessButton();
       SetPlaceholders();
@@ -1268,6 +1281,161 @@ namespace DMF
       tableGif.Controls.Add(gifBayerScale, 1, 5);
       tableGif.Controls.Add(new Label { Text = "0–5 (for Bayer dither)", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 5);
 
+      /* Info */
+      var tabInfo = new TabPage("Info");
+      tabControl.TabPages.Add(tabInfo);
+
+      var tableInfo = new TableLayoutPanel
+      {
+        Dock = DockStyle.Fill,
+        ColumnCount = 3,
+        RowCount = 11,
+        Padding = new Padding(10),
+        AutoSize = false
+      };
+      tableInfo.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
+      tableInfo.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+      tableInfo.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
+      for (int i = 0; i < 11; i++) tableInfo.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+      tabInfo.Controls.Add(tableInfo);
+
+      // Row 0: DMF version
+      tableInfo.Controls.Add(new Label { Text = "DMF version:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 0);
+      dmfVersion = new Label { Text = "...", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray };
+      tableInfo.Controls.Add(dmfVersion, 1, 0);
+      tableInfo.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 0);
+
+      // Row 1: FFmpeg version
+      tableInfo.Controls.Add(new Label { Text = "FFmpeg version:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 1);
+      ffmpegVersion = new Label
+      {
+        Text = "...",
+        TextAlign = ContentAlignment.MiddleLeft,
+        Dock = DockStyle.Fill,
+        ForeColor = Color.Gray,
+        AutoSize = false
+      };
+      tableInfo.SetColumnSpan(ffmpegVersion, 2);
+      tableInfo.Controls.Add(ffmpegVersion, 1, 1);
+
+      // Row 2: FFprobe version
+      tableInfo.Controls.Add(new Label { Text = "FFprobe version:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 2);
+      ffprobeVersion = new Label
+      {
+        Text = "...",
+        TextAlign = ContentAlignment.MiddleLeft,
+        Dock = DockStyle.Fill,
+        ForeColor = Color.Gray,
+        AutoSize = false
+      };
+      tableInfo.SetColumnSpan(ffprobeVersion, 2);
+      tableInfo.Controls.Add(ffprobeVersion, 1, 2);
+
+      // Row 3: FFmpeg path
+      tableInfo.Controls.Add(new Label { Text = "FFmpeg path:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 3);
+      ffmpegPath = new Label { Text = "...", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray };
+      tableInfo.Controls.Add(ffmpegPath, 1, 3);
+      var btnChangeFfmpeg = new Button { Text = "Change", Dock = DockStyle.Fill, AutoSize = false };
+      btnChangeFfmpeg.Click += (s, e) => ChangeFFmpegPath();
+      tableInfo.Controls.Add(btnChangeFfmpeg, 2, 3);
+
+      // Row 4: FFprobe path
+      tableInfo.Controls.Add(new Label { Text = "FFprobe path:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 4);
+      ffprobePath = new Label { Text = "...", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray };
+      tableInfo.Controls.Add(ffprobePath, 1, 4);
+      var btnChangeFfprobe = new Button { Text = "Change", Dock = DockStyle.Fill, AutoSize = false };
+      btnChangeFfprobe.Click += (s, e) => ChangeFFprobePath();
+      tableInfo.Controls.Add(btnChangeFfprobe, 2, 4);
+
+      // Row 5: Settings path
+      tableInfo.Controls.Add(new Label { Text = "Settings path:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 5);
+      settingsPathLabel = new Label
+      {
+        Text = "...",
+        TextAlign = ContentAlignment.MiddleLeft,
+        Dock = DockStyle.Fill,
+        ForeColor = Color.Gray,
+        AutoSize = false
+      };
+      tableInfo.SetColumnSpan(settingsPathLabel, 2);
+      tableInfo.Controls.Add(settingsPathLabel, 1, 5);
+
+      // Row 6: Log path
+      tableInfo.Controls.Add(new Label { Text = "Log path:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 6);
+      logPathLabel = new Label
+      {
+        Text = "...",
+        TextAlign = ContentAlignment.MiddleLeft,
+        Dock = DockStyle.Fill,
+        ForeColor = Color.Gray,
+        AutoSize = false
+      };
+      tableInfo.SetColumnSpan(logPathLabel, 2);
+      tableInfo.Controls.Add(logPathLabel, 1, 6);
+
+      // Row 7: .NET version
+      tableInfo.Controls.Add(new Label { Text = ".NET version:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 7);
+      dotNetVersion = new Label { Text = "...", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray };
+      tableInfo.Controls.Add(dotNetVersion, 1, 7);
+      tableInfo.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 7);
+
+      // Row 8: OS version
+      tableInfo.Controls.Add(new Label { Text = "OS version:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 8);
+      osVersion = new Label { Text = "...", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray };
+      tableInfo.Controls.Add(osVersion, 1, 8);
+      tableInfo.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 8);
+
+      // Row 9: Button Panel
+      var buttonPanel = new TableLayoutPanel
+      {
+        Dock = DockStyle.Fill,
+        ColumnCount = 2,
+        RowCount = 1,
+        AutoSize = true,
+        Margin = new Padding(0, 10, 0, 0)
+      };
+      buttonPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+      buttonPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+
+      var copyButton = new Button
+      {
+        Text = "Copy info",
+        Dock = DockStyle.Fill,
+        BackColor = Color.LightSteelBlue,
+        AutoSize = false,
+        Height = 30
+      };
+      copyButton.Click += (s, e) =>
+      {
+        string info = $"DMF: {dmfVersion.Text}\n" +
+                      $"FFmpeg: {ffmpegVersion.Text}\n" +
+                      $"FFprobe: {ffprobeVersion.Text}\n" +
+                      $"FFmpeg path: {ffmpegPath.Text}\n" +
+                      $"FFprobe path: {ffprobePath.Text}\n" +
+                      $"Settings: {settingsPathLabel.Text}\n" +
+                      $"Log: {logPathLabel.Text}\n" +
+                      $".NET: {dotNetVersion.Text}\n" +
+                      $"OS: {osVersion.Text}";
+        Clipboard.SetText(info);
+        status.Text = "Info copied to clipboard";
+      };
+      buttonPanel.Controls.Add(copyButton, 0, 0);
+
+      var openFolderButton = new Button
+      {
+        Text = "Open data folder",
+        Dock = DockStyle.Fill,
+        BackColor = Color.LightSteelBlue,
+        AutoSize = false,
+        Height = 30
+      };
+      openFolderButton.Click += (s, e) => OpenFolder(Path.Combine(GetAppDataFolder(), "DMF"));
+      buttonPanel.Controls.Add(openFolderButton, 1, 0);
+
+      tableInfo.Controls.Add(new Label { Dock = DockStyle.Fill }, 0, 9);
+      tableInfo.Controls.Add(buttonPanel, 1, 9);
+      tableInfo.SetColumnSpan(buttonPanel, 2);
+
       /* Bottom Panel/Buttons */
       var bottomPanel = new Panel
       {
@@ -1365,6 +1533,11 @@ namespace DMF
         UpdateControlStates();
       };
       crf.ValueChanged += (s, e) => UpdateControlStates();
+      tabControl.SelectedIndexChanged += async (s, e) =>
+      {
+        if (tabControl.SelectedTab == tabInfo)
+          await UpdateInfoTabAsync();
+      };
 
       UpdateTimeFields();
       UpdateControlStates();
@@ -3180,6 +3353,121 @@ namespace DMF
       }
       catch (Exception ex) { MessageBox.Show($"Could not open folder: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
     }
+
+    private static async Task<string> GetToolVersion(string toolPath, string toolName)
+    {
+      try
+      {
+        var psi = new ProcessStartInfo
+        {
+          FileName = toolPath,
+          Arguments = "-version",
+          UseShellExecute = false,
+          RedirectStandardOutput = true,
+          CreateNoWindow = true
+        };
+        using var p = Process.Start(psi);
+        if (p == null) return "Not found";
+        string output = await p.StandardOutput.ReadLineAsync() ?? "";
+        await p.WaitForExitAsync();
+        if (p.ExitCode == 0 && !string.IsNullOrEmpty(output)) return output.Trim();
+        return "Unknown";
+      }
+      catch { return "Error"; }
+    }
+
+    private async Task UpdateInfoTabAsync()
+    {
+      try
+      {
+        string ffmpegPathStr = settings.FfmpegPath ?? FfmpegExecutable;
+        string ffprobePathStr = settings.FfprobePath ?? FfprobeExecutable;
+
+        if (!Path.IsPathRooted(ffmpegPathStr))
+        {
+          string? fullPath = FindExecutableInPath(ffmpegPathStr);
+          if (fullPath != null) ffmpegPathStr = fullPath;
+        }
+        if (!Path.IsPathRooted(ffprobePathStr))
+        {
+          string? fullPath = FindExecutableInPath(ffprobePathStr);
+          if (fullPath != null) ffprobePathStr = fullPath;
+        }
+
+        _ffmpegVersion = await GetToolVersion(ffmpegPathStr, "ffmpeg");
+        _ffprobeVersion = await GetToolVersion(ffprobePathStr, "ffprobe");
+
+        Invoke(() =>
+        {
+          ffmpegVersion.Text = _ffmpegVersion;
+          ffprobeVersion.Text = _ffprobeVersion;
+          dmfVersion.Text = GetCurrentVersion().ToString();
+          ffmpegPath.Text = ffmpegPathStr;
+          ffprobePath.Text = ffprobePathStr;
+          settingsPathLabel.Text = settingsFile;
+          logPathLabel.Text = Path.Combine(GetAppDataFolder(), "log.txt");
+          dotNetVersion.Text = Environment.Version.ToString();
+          osVersion.Text = Environment.OSVersion.ToString();
+        });
+      }
+      catch (Exception ex) { /* ... */ }
+    }
+
+    private static string? FindExecutableInPath(string fileName)
+    {
+      try
+      {
+        var psi = new ProcessStartInfo
+        {
+          FileName = "where",
+          Arguments = fileName,
+          UseShellExecute = false,
+          RedirectStandardOutput = true,
+          CreateNoWindow = true
+        };
+        using var p = Process.Start(psi);
+        if (p == null) return null;
+        string output = p.StandardOutput.ReadLine();
+        p.WaitForExit(1000);
+        if (p.ExitCode == 0 && !string.IsNullOrEmpty(output))
+          return output.Trim();
+      }
+      catch { /* ignore */ }
+      return null;
+    }
+
+    private void ChangeFFmpegPath()
+    {
+      using var dialog = new OpenFileDialog
+      {
+        Title = "Select ffmpeg.exe",
+        Filter = "Executable|ffmpeg.exe|All files|*.*"
+      };
+      if (dialog.ShowDialog() == DialogResult.OK)
+      {
+        settings.FfmpegPath = dialog.FileName;
+        SaveSettings();
+        _ffmpegChecked = false;
+        _ = UpdateInfoTabAsync();
+        CheckFFmpeg();
+      }
+    }
+
+    private void ChangeFFprobePath()
+    {
+      using var dialog = new OpenFileDialog
+      {
+        Title = "Select ffprobe.exe",
+        Filter = "Executable|ffprobe.exe|All files|*.*"
+      };
+      if (dialog.ShowDialog() == DialogResult.OK)
+      {
+        settings.FfprobePath = dialog.FileName;
+        SaveSettings();
+        _ = UpdateInfoTabAsync();
+      }
+    }
+
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
