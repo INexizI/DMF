@@ -82,6 +82,14 @@ namespace DMF
     // Filters
     private TextBox videoFilter = null!;
     private TextBox audioFilter = null!;
+    // Subtitles
+    private CheckBox chkSubtitles = null!;
+    private RadioButton rbSubFromInput = null!;
+    private RadioButton rbSubExternal = null!;
+    private NumericUpDown subTrackNumber = null!;
+    private TextBox subExternalFile = null!;
+    private Button btnSubBrowse = null!;
+    private CheckBox chkSubCopy = null!;
     // Advanced
     private TextBox mapStreams = null!;
     private ComboBox hwAccel = null!;
@@ -613,7 +621,6 @@ namespace DMF
       format.Items.AddRange(videoFormats.Cast<object>().ToArray());
       format.SelectedIndex = 0;
       tableBasic.Controls.Add(format, 1, 2);
-      tableBasic.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 2);
 
       // Row 3: Trim mode
       tableBasic.Controls.Add(new Label { Text = "Trim mode:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 3);
@@ -626,7 +633,6 @@ namespace DMF
       };
       trimMode.SelectedIndexChanged += TrimMode_SelectedIndexChanged;
       tableBasic.Controls.Add(trimMode, 1, 3);
-      tableBasic.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 3);
 
       // Row 4: Start time
       tableBasic.Controls.Add(new Label { Text = "Start time:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 4);
@@ -634,7 +640,6 @@ namespace DMF
       startTime.GotFocus += (s, e) => RemovePlaceholder(startTime, TimePlaceholder);
       startTime.LostFocus += (s, e) => RestorePlaceholder(startTime, TimePlaceholder);
       tableBasic.Controls.Add(startTime, 1, 4);
-      tableBasic.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 4);
 
       // Row 5: End time
       tableBasic.Controls.Add(new Label { Text = "End time:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 5);
@@ -642,7 +647,6 @@ namespace DMF
       endTime.GotFocus += (s, e) => RemovePlaceholder(endTime, TimePlaceholder);
       endTime.LostFocus += (s, e) => RestorePlaceholder(endTime, TimePlaceholder);
       tableBasic.Controls.Add(endTime, 1, 5);
-      tableBasic.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 5);
 
       // Row 6: Video codec
       tableBasic.Controls.Add(new Label { Text = "Video codec:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 6);
@@ -693,7 +697,8 @@ namespace DMF
       {
         Dock = DockStyle.Fill,
         FlowDirection = FlowDirection.LeftToRight,
-        WrapContents = false
+        WrapContents = false,
+        AutoSize = true
       };
       audioOnly = new CheckBox { Text = "Audio only", AutoSize = true, Checked = false };
       audioOnly.CheckedChanged += ChkAudioOnly_CheckedChanged;
@@ -703,7 +708,6 @@ namespace DMF
       checkPanel.Controls.Add(overwrite);
       checkPanel.Controls.Add(openOnSuccess);
       tableBasic.Controls.Add(checkPanel, 1, 8);
-      tableBasic.Controls.Add(new Label { Dock = DockStyle.Fill }, 2, 8);
 
       /* Presets */
       var tabPresets = new TabPage("Presets");
@@ -1102,6 +1106,88 @@ namespace DMF
       };
       tableFilters.SetColumnSpan(hintAudio, 2);
       tableFilters.Controls.Add(hintAudio, 1, 3);
+
+      /* Subtitles */
+      var tabSubtitles = new TabPage("Subtitles");
+      tabControl.TabPages.Add(tabSubtitles);
+      var tableSubtitles = new TableLayoutPanel
+      {
+        Dock = DockStyle.Fill,
+        ColumnCount = 3,
+        RowCount = 5,
+        Padding = new Padding(10),
+        AutoSize = false
+      };
+      tableSubtitles.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
+      tableSubtitles.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+      tableSubtitles.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
+      tabSubtitles.Controls.Add(tableSubtitles);
+
+      // Row 0: Enable subtitles
+      chkSubtitles = new CheckBox { Text = "Add subtitles", Dock = DockStyle.Fill, Checked = false };
+      chkSubtitles.CheckedChanged += (s, e) => UpdateControlStates();
+      tableSubtitles.Controls.Add(chkSubtitles, 1, 0);
+
+      // Row 1: Source selection
+      tableSubtitles.Controls.Add(new Label { Text = "Source:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 1);
+      var sourcePanel = new FlowLayoutPanel { Dock = DockStyle.Fill, MaximumSize = new Size(0, 25), FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
+      rbSubFromInput = new RadioButton { Text = "From input file", AutoSize = true, Checked = true };
+      rbSubExternal = new RadioButton { Text = "External file", AutoSize = true };
+      sourcePanel.Controls.Add(rbSubFromInput);
+      sourcePanel.Controls.Add(rbSubExternal);
+      tableSubtitles.Controls.Add(sourcePanel, 1, 1);
+
+      // Row 2: Track number (for input)
+      tableSubtitles.Controls.Add(new Label { Text = "Track number:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 2);
+      subTrackNumber = new NumericUpDown
+      {
+        Minimum = 0,
+        Maximum = 10,
+        Value = 0,
+        Increment = 1,
+        Dock = DockStyle.Fill
+      };
+      tableSubtitles.Controls.Add(subTrackNumber, 1, 2);
+      tableSubtitles.Controls.Add(new Label { Text = "0 = first track", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 2);
+
+      // Row 3: External file
+      tableSubtitles.Controls.Add(new Label { Text = "File:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 3);
+      subExternalFile = new TextBox { Dock = DockStyle.Fill, Enabled = false };
+      btnSubBrowse = new Button { Text = "Browse...", Dock = DockStyle.Fill, AutoSize = false, Enabled = false };
+      btnSubBrowse.Click += (s, e) =>
+      {
+        using var dialog = new OpenFileDialog
+        {
+          Title = "Select subtitle file",
+          Filter = "Subtitle files|*.srt;*.ass;*.ssa;*.vtt|All files|*.*"
+        };
+        if (dialog.ShowDialog() == DialogResult.OK) subExternalFile.Text = dialog.FileName;
+      };
+      var browsePanel = new TableLayoutPanel { Dock = DockStyle.Fill, MaximumSize = new Size(0, 25), ColumnCount = 2, RowCount = 1 };
+      browsePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+      browsePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));
+      browsePanel.Controls.Add(subExternalFile, 0, 0);
+      browsePanel.Controls.Add(btnSubBrowse, 1, 0);
+      tableSubtitles.Controls.Add(browsePanel, 1, 3);
+
+      // Row 4: Copy subtitles
+      chkSubCopy = new CheckBox { Text = "Copy subtitles (no re-encode)", Dock = DockStyle.Fill, MaximumSize = new Size(0, 25), Checked = true };
+      tableSubtitles.Controls.Add(chkSubCopy, 1, 4);
+      tableSubtitles.Controls.Add(new Label
+      {
+        Text = "Recommended",
+        TextAlign = ContentAlignment.MiddleLeft,
+        Dock = DockStyle.Fill,
+        MaximumSize = new Size(0, 25),
+        ForeColor = Color.Gray
+      }, 2, 4);
+
+      rbSubFromInput.CheckedChanged += (s, e) =>
+      {
+        subTrackNumber.Enabled = rbSubFromInput.Checked;
+        subExternalFile.Enabled = rbSubExternal.Checked;
+        btnSubBrowse.Enabled = rbSubExternal.Checked;
+      };
 
       /* Advanced */
       var tabAdvanced = new TabPage("Advanced");
@@ -1782,6 +1868,16 @@ namespace DMF
       mapStreams.Enabled = true;
       hwAccel.Enabled = true;
       hwAccelOutput.Enabled = hwAccel.SelectedIndex != 0;
+
+      // ------ Subtitles controls ------
+      bool subtitlesEnabled = chkSubtitles.Checked && !audioOnlyChecked && videoEnabled;
+      chkSubtitles.Enabled = !audioOnlyChecked;
+      rbSubFromInput.Enabled = subtitlesEnabled;
+      rbSubExternal.Enabled = subtitlesEnabled;
+      subTrackNumber.Enabled = subtitlesEnabled && rbSubFromInput.Checked;
+      subExternalFile.Enabled = subtitlesEnabled && rbSubExternal.Checked;
+      btnSubBrowse.Enabled = subtitlesEnabled && rbSubExternal.Checked;
+      chkSubCopy.Enabled = subtitlesEnabled;
 
       // ------ Preview controls ------
       bool previewEnabled = !audioOnly.Checked &&
@@ -2831,6 +2927,34 @@ namespace DMF
                         + $"Codec '{videoCodecSelected}' does not support preset parameter. It will be ignored.";
       }
 
+      // Subtitles validation
+      if (chkSubtitles.Checked)
+      {
+        if (rbSubExternal.Checked && !string.IsNullOrWhiteSpace(subExternalFile.Text) && !File.Exists(subExternalFile.Text))
+        {
+          errorMessage = "External subtitle file not found.";
+          return false;
+        }
+        if (audioOnlyChecked)
+          warningMessage += (string.IsNullOrEmpty(warningMessage) ? "" : "\n") + "Subtitles are ignored when Audio only mode is enabled.";
+        string fmt = format.SelectedItem?.ToString() ?? "mp4";
+        if (fmt == "avi" || fmt == "ts" || fmt == "flv")
+          warningMessage += (string.IsNullOrEmpty(warningMessage) ? "" : "\n") + $"Subtitles in '{fmt}' container may not be supported or may not play correctly.";
+      }
+      // Check compatibility SRT with MP4
+      if (chkSubtitles.Checked && rbSubExternal.Checked && !string.IsNullOrWhiteSpace(subExternalFile.Text))
+      {
+        string fmt = format.SelectedItem?.ToString() ?? "mp4";
+        string ext = Path.GetExtension(subExternalFile.Text).ToLowerInvariant();
+        if ((fmt == "mp4" || fmt == "mov" || fmt == "m4v") && ext == ".srt")
+        {
+          warningMessage += (string.IsNullOrEmpty(warningMessage) ? "" : "\n")
+                          + "SRT subtitles in MP4/MOV will be converted to mov_text (required by container).\n"
+                          + "This is normal and does not affect quality.";
+        }
+      }
+
+
       if (!string.IsNullOrEmpty(errorMessage))
         Logger.Warning($"Parameter validation error: {errorMessage}");
       if (!string.IsNullOrEmpty(warningMessage))
@@ -3087,6 +3211,51 @@ namespace DMF
 
           if (!string.IsNullOrWhiteSpace(mapStreams.Text))
             argsList.Add($"-map {mapStreams.Text.Trim()}");
+
+          if (chkSubtitles.Checked && !audioOnlyChecked)
+          {
+            string containerFormat = format.SelectedItem?.ToString() ?? "mp4";
+            string subtitleCodec = "copy";
+
+            if (containerFormat == "mp4" || containerFormat == "mov" || containerFormat == "m4v")
+              subtitleCodec = "mov_text";
+            else if (containerFormat == "mkv")
+              subtitleCodec = "copy";
+            else
+              subtitleCodec = "copy";
+
+            if (rbSubFromInput.Checked)
+            {
+              int track = (int)subTrackNumber.Value;
+              argsList.Add($"-map 0:s:{track}");
+              argsList.Add($"-c:s {subtitleCodec}");
+            }
+            else if (rbSubExternal.Checked && !string.IsNullOrWhiteSpace(subExternalFile.Text) && File.Exists(subExternalFile.Text))
+            {
+              if (string.IsNullOrWhiteSpace(mapStreams.Text))
+              {
+                argsList.Add("-map 0:v -map 0:a");
+              }
+
+              string inputArg = $"-i \"{inputFile.Text}\"";
+              int mainInputIndex = -1;
+              for (int i = 0; i < argsList.Count; i++)
+              {
+                if (argsList[i] == inputArg)
+                {
+                  mainInputIndex = i;
+                  break;
+                }
+              }
+              if (mainInputIndex != -1)
+              {
+                argsList.Insert(mainInputIndex + 1, $"\"{subExternalFile.Text}\"");
+                argsList.Insert(mainInputIndex + 1, "-i");
+                argsList.Add($"-map 1:s");
+                argsList.Add($"-c:s {subtitleCodec}");
+              }
+            }
+          }
         }
 
         argsList.Add($"\"{outputFile.Text}\"");
