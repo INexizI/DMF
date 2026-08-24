@@ -386,29 +386,77 @@ namespace DMF
 
     private bool CheckFFmpeg()
     {
-      string ffmpegPath = settings.FfmpegPath ?? FfmpegExecutable;
-
-      if (_ffmpegChecked && _lastFfmpegPath == ffmpegPath)
+      // 1. If the path is saved in the settings
+      if (!string.IsNullOrEmpty(settings.FfmpegPath))
       {
-        Logger.Debug($"Using cached FFmpeg check result: {_ffmpegAvailable} (path: {ffmpegPath})");
+        if (File.Exists(settings.FfmpegPath))
+        {
+          if (IsExecutableAvailable(settings.FfmpegPath, "-version", 3000))
+          {
+            _ffmpegAvailable = true;
+            _ffmpegChecked = true;
+            _lastFfmpegPath = settings.FfmpegPath;
+            Logger.Info($"FFmpeg found via saved path: '{settings.FfmpegPath}'");
+            return true;
+          }
+          else
+          {
+            Logger.Warning($"Saved FFmpeg path '{settings.FfmpegPath}' is not valid.");
+            _ffmpegAvailable = false;
+            _ffmpegChecked = true;
+            _lastFfmpegPath = settings.FfmpegPath;
+            return false;
+          }
+        }
+        else
+        {
+          Logger.Warning($"Saved FFmpeg path '{settings.FfmpegPath}' does not exist.");
+          settings.FfmpegPath = null;
+          SaveSettings();
+          _ffmpegAvailable = false;
+          _ffmpegChecked = true;
+          _lastFfmpegPath = null;
+          return false;
+        }
+      }
+
+      // 2. The path is not set – we perform a search in the PATH and locally
+      if (_ffmpegChecked && _lastFfmpegPath == FfmpegExecutable)
+      {
+        Logger.Debug($"Using cached FFmpeg check result: {_ffmpegAvailable} (path: {FfmpegExecutable})");
         return _ffmpegAvailable;
       }
 
-      Logger.Debug($"Checking FFmpeg at '{ffmpegPath}'");
-      bool available = IsExecutableAvailable(ffmpegPath, "-version", 3000);
+      Logger.Debug($"Checking FFmpeg in PATH and app directory...");
 
-      if (available)
+      bool availableInPath = IsExecutableAvailable(FfmpegExecutable, "-version", 3000);
+      if (availableInPath)
       {
-        Logger.Info($"FFmpeg found at '{ffmpegPath}'");
-        _ffmpegAvailable = true;
-        _ffmpegChecked = true;
-        _lastFfmpegPath = ffmpegPath;
-        return true;
+        string? fullPath = FindExecutableInPath(FfmpegExecutable);
+        if (!string.IsNullOrEmpty(fullPath))
+        {
+          settings.FfmpegPath = fullPath;
+          SaveSettings();
+          Logger.Info($"FFmpeg found in PATH at '{fullPath}'");
+          _ffmpegAvailable = true;
+          _ffmpegChecked = true;
+          _lastFfmpegPath = fullPath;
+          return true;
+        }
+        else
+        {
+          settings.FfmpegPath = FfmpegExecutable;
+          SaveSettings();
+          _ffmpegAvailable = true;
+          _ffmpegChecked = true;
+          _lastFfmpegPath = FfmpegExecutable;
+          return true;
+        }
       }
 
       string appDir = AppDomain.CurrentDomain.BaseDirectory;
       string localFfmpeg = Path.Combine(appDir, "ffmpeg.exe");
-      if (File.Exists(localFfmpeg))
+      if (File.Exists(localFfmpeg) && IsExecutableAvailable(localFfmpeg, "-version", 3000))
       {
         Logger.Info($"FFmpeg found in app directory: '{localFfmpeg}'");
         settings.FfmpegPath = localFfmpeg;
@@ -419,16 +467,17 @@ namespace DMF
         return true;
       }
 
-      Logger.Warning($"FFmpeg not found at '{ffmpegPath}'");
+      // 3. FFmpeg was not found – we show the dialog only if the path was not set earlier
+      Logger.Warning("FFmpeg not found.");
       _ffmpegAvailable = false;
       _ffmpegChecked = true;
-      _lastFfmpegPath = ffmpegPath;
+      _lastFfmpegPath = FfmpegExecutable;
 
       var result = MessageBox.Show(
-        "FFmpeg not found.\n\nWould you like to specify the path to ffmpeg.exe?",
-        "Missing FFmpeg",
-        MessageBoxButtons.YesNo,
-        MessageBoxIcon.Warning);
+          "FFmpeg not found.\n\nWould you like to specify the path to ffmpeg.exe?",
+          "Missing FFmpeg",
+          MessageBoxButtons.YesNo,
+          MessageBoxIcon.Warning);
 
       if (result == DialogResult.Yes)
       {
@@ -441,17 +490,16 @@ namespace DMF
         {
           settings.FfmpegPath = dialog.FileName;
           SaveSettings();
-
           _ffmpegChecked = false;
           return CheckFFmpeg();
         }
         else
         {
           var download = MessageBox.Show(
-            "FFmpeg is required to run this application.\nDo you want to open the download page?",
-            "Download FFmpeg",
-            MessageBoxButtons.YesNo,
-            MessageBoxIcon.Information);
+              "FFmpeg is required to run this application.\nDo you want to open the download page?",
+              "Download FFmpeg",
+              MessageBoxButtons.YesNo,
+              MessageBoxIcon.Information);
           if (download == DialogResult.Yes)
             Process.Start(new ProcessStartInfo(FfmpegDownloadUrl) { UseShellExecute = true });
           return false;
@@ -460,10 +508,10 @@ namespace DMF
       else
       {
         var download = MessageBox.Show(
-          "FFmpeg is required to run this application.\nDo you want to open the download page?",
-          "Download FFmpeg",
-          MessageBoxButtons.YesNo,
-          MessageBoxIcon.Information);
+            "FFmpeg is required to run this application.\nDo you want to open the download page?",
+            "Download FFmpeg",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Information);
         if (download == DialogResult.Yes)
           Process.Start(new ProcessStartInfo(FfmpegDownloadUrl) { UseShellExecute = true });
         return false;
@@ -480,6 +528,8 @@ namespace DMF
 
     private void LoadSettings()
     {
+      string? oldPath = settings.FfmpegPath;
+
       try
       {
         if (File.Exists(settingsFile))
@@ -492,8 +542,11 @@ namespace DMF
       }
       catch { settings = new Settings(); }
 
-      _ffmpegChecked = false;
-      _lastFfmpegPath = null;
+      if (oldPath != settings.FfmpegPath || !string.IsNullOrEmpty(settings.FfmpegPath) && !File.Exists(settings.FfmpegPath))
+      {
+        _ffmpegChecked = false;
+        _lastFfmpegPath = null;
+      }
 
       ApplySettings();
     }
