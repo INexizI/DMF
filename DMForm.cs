@@ -130,6 +130,9 @@ namespace DMF
     private Label dotNetVersion = null!;
     private Label osVersion = null!;
 
+    private TabControl? tabControl;
+    private TabPage? _tabBasic;
+
     private readonly Dictionary<string, string> videoCodecDescriptions = new()
     {
       { "copy", "Stream copy\n(no re-encode)" },
@@ -562,7 +565,7 @@ namespace DMF
       var mainContainer = new Panel { Dock = DockStyle.Fill };
       Controls.Add(mainContainer);
 
-      var tabControl = new TabControl
+      tabControl = new TabControl
       {
         Dock = DockStyle.Fill,
         Padding = new Point(10, 5)
@@ -572,6 +575,7 @@ namespace DMF
       /* Basic */
       var tabBasic = new TabPage("Basic");
       tabControl.TabPages.Add(tabBasic);
+      _tabBasic = tabBasic;
       var tableBasic = new TableLayoutPanel
       {
         Dock = DockStyle.Fill,
@@ -1631,6 +1635,12 @@ namespace DMF
 
     private void DMForm_DragEnter(object? sender, DragEventArgs e)
     {
+      if (tabControl != null && _tabBasic != null && tabControl.SelectedTab != _tabBasic)
+      {
+        e.Effect = DragDropEffects.None;
+        return;
+      }
+
       if (e.Data?.GetDataPresent(DataFormats.FileDrop) == true)
         e.Effect = DragDropEffects.Copy;
       else
@@ -1639,6 +1649,9 @@ namespace DMF
 
     private void DMForm_DragDrop(object? sender, DragEventArgs e)
     {
+      if (tabControl == null || _tabBasic == null || tabControl.SelectedTab != _tabBasic)
+        return;
+
       if (e.Data?.GetData(DataFormats.FileDrop) is not string[] files || files.Length == 0)
         return;
 
