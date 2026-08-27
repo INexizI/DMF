@@ -37,7 +37,7 @@ namespace DMF
     private const string FfprobeExecutable = "ffprobe";
     private const string ExplorerExecutable = "explorer.exe";
     private const string FfmpegDownloadUrl = "https://ffmpeg.org/download.html";
-    private const int ProcessCheckTimeoutMs = 3000;
+    private const int ProcessCheckTimeoutMs = 10000;
     private const int WindowEdgeOffset = 50;
     /* Presets */
     private const string PresetWeb = "Web";
@@ -391,7 +391,7 @@ namespace DMF
       {
         if (File.Exists(settings.FfmpegPath))
         {
-          if (IsExecutableAvailable(settings.FfmpegPath, "-version", 3000))
+          if (IsExecutableAvailable(settings.FfmpegPath, "-version", ProcessCheckTimeoutMs))
           {
             _ffmpegAvailable = true;
             _ffmpegChecked = true;
@@ -429,7 +429,7 @@ namespace DMF
 
       Logger.Debug($"Checking FFmpeg in PATH and app directory...");
 
-      bool availableInPath = IsExecutableAvailable(FfmpegExecutable, "-version", 3000);
+      bool availableInPath = IsExecutableAvailable(FfmpegExecutable, "-version", ProcessCheckTimeoutMs);
       if (availableInPath)
       {
         string? fullPath = FindExecutableInPath(FfmpegExecutable);
@@ -441,6 +441,7 @@ namespace DMF
           _ffmpegAvailable = true;
           _ffmpegChecked = true;
           _lastFfmpegPath = fullPath;
+          ffmpegPath.Text = fullPath;
           return true;
         }
         else
@@ -456,7 +457,7 @@ namespace DMF
 
       string appDir = AppDomain.CurrentDomain.BaseDirectory;
       string localFfmpeg = Path.Combine(appDir, "ffmpeg.exe");
-      if (File.Exists(localFfmpeg) && IsExecutableAvailable(localFfmpeg, "-version", 3000))
+      if (File.Exists(localFfmpeg) && IsExecutableAvailable(localFfmpeg, "-version", ProcessCheckTimeoutMs))
       {
         Logger.Info($"FFmpeg found in app directory: '{localFfmpeg}'");
         settings.FfmpegPath = localFfmpeg;
@@ -464,6 +465,7 @@ namespace DMF
         _ffmpegAvailable = true;
         _ffmpegChecked = true;
         _lastFfmpegPath = localFfmpeg;
+        ffmpegPath.Text = localFfmpeg;
         return true;
       }
 
@@ -474,10 +476,10 @@ namespace DMF
       _lastFfmpegPath = FfmpegExecutable;
 
       var result = MessageBox.Show(
-          "FFmpeg not found.\n\nWould you like to specify the path to ffmpeg.exe?",
-          "Missing FFmpeg",
-          MessageBoxButtons.YesNo,
-          MessageBoxIcon.Warning);
+        "FFmpeg not found.\n\nWould you like to specify the path to ffmpeg.exe?",
+        "Missing FFmpeg",
+        MessageBoxButtons.YesNo,
+        MessageBoxIcon.Warning);
 
       if (result == DialogResult.Yes)
       {
@@ -496,10 +498,10 @@ namespace DMF
         else
         {
           var download = MessageBox.Show(
-              "FFmpeg is required to run this application.\nDo you want to open the download page?",
-              "Download FFmpeg",
-              MessageBoxButtons.YesNo,
-              MessageBoxIcon.Information);
+            "FFmpeg is required to run this application.\nDo you want to open the download page?",
+            "Download FFmpeg",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Information);
           if (download == DialogResult.Yes)
             Process.Start(new ProcessStartInfo(FfmpegDownloadUrl) { UseShellExecute = true });
           return false;
@@ -508,10 +510,10 @@ namespace DMF
       else
       {
         var download = MessageBox.Show(
-            "FFmpeg is required to run this application.\nDo you want to open the download page?",
-            "Download FFmpeg",
-            MessageBoxButtons.YesNo,
-            MessageBoxIcon.Information);
+          "FFmpeg is required to run this application.\nDo you want to open the download page?",
+          "Download FFmpeg",
+          MessageBoxButtons.YesNo,
+          MessageBoxIcon.Information);
         if (download == DialogResult.Yes)
           Process.Start(new ProcessStartInfo(FfmpegDownloadUrl) { UseShellExecute = true });
         return false;
@@ -522,7 +524,12 @@ namespace DMF
     {
       string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
       string appFolder = Path.Combine(localAppData, "DMF");
-      if (!Directory.Exists(appFolder)) Directory.CreateDirectory(appFolder);
+      try
+      {
+        if (!Directory.Exists(appFolder))
+          Directory.CreateDirectory(appFolder);
+      }
+      catch (Exception ex) { Logger.Error($"Failed to create app folder: {ex.Message}"); }
       return appFolder;
     }
 
@@ -540,9 +547,34 @@ namespace DMF
         else
           settings = new Settings();
       }
-      catch { settings = new Settings(); }
+      catch (JsonException ex)
+      {
+        Logger.Error($"Settings file corrupted: {ex.Message}");
+        string backupFile = settingsFile + ".bak";
+        if (File.Exists(backupFile))
+        {
+          try
+          {
+            string backupJson = File.ReadAllText(backupFile);
+            settings = JsonSerializer.Deserialize<Settings>(backupJson) ?? new Settings();
+            Logger.Info("Settings restored from backup.");
+          }
+          catch (Exception backupEx)
+          {
+            Logger.Error($"Failed to restore from backup: {backupEx.Message}");
+            settings = new Settings();
+          }
+        }
+        else
+          settings = new Settings();
+      }
+      catch (Exception ex)
+      {
+        Logger.Error($"LoadSettings failed: {ex.Message}");
+        settings = new Settings();
+      }
 
-      if (oldPath != settings.FfmpegPath || !string.IsNullOrEmpty(settings.FfmpegPath) && !File.Exists(settings.FfmpegPath))
+      if (oldPath != settings.FfmpegPath || (!string.IsNullOrEmpty(settings.FfmpegPath) && !File.Exists(settings.FfmpegPath)))
       {
         _ffmpegChecked = false;
         _lastFfmpegPath = null;
@@ -595,9 +627,15 @@ namespace DMF
         settings.OpenOnSuccess = openOnSuccess.Checked;
 
         string json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
+        if (File.Exists(settingsFile))
+        {
+          string backup = settingsFile + ".bak";
+          if (File.Exists(backup)) File.Delete(backup);
+          File.Copy(settingsFile, backup);
+        }
         File.WriteAllText(settingsFile, json);
       }
-      catch (Exception ex) { Console.WriteLine($"Error saving settings: {ex.Message}"); }
+      catch (Exception ex) { Logger.Error($"SaveSettings failed: {ex.Message}"); }
     }
 
     private void InitializeForm()
@@ -3683,6 +3721,7 @@ namespace DMF
         settings.FfmpegPath = dialog.FileName;
         SaveSettings();
         _ffmpegChecked = false;
+        ffmpegPath.Text = dialog.FileName;
         _ = UpdateInfoTabAsync();
         CheckFFmpeg();
       }
@@ -3699,6 +3738,7 @@ namespace DMF
       {
         settings.FfprobePath = dialog.FileName;
         SaveSettings();
+        ffprobePath.Text = dialog.FileName;
         _ = UpdateInfoTabAsync();
       }
     }
