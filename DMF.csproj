@@ -15,10 +15,10 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Version>0.6.3</Version>
-    <FileVersion>0.6.3</FileVersion>
+    <Version>0.6.4</Version>
+    <FileVersion>0.6.4</FileVersion>
     <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <InformationalVersion>0.6.3+$(SourceRevisionId)</InformationalVersion>
+    <InformationalVersion>0.6.4+$(SourceRevisionId)</InformationalVersion>
   </PropertyGroup>
 
   <PropertyGroup>
