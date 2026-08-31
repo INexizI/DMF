@@ -41,7 +41,8 @@ namespace DMF
 
     private void PictureBox_Paint(object? sender, PaintEventArgs e)
     {
-      if (string.IsNullOrEmpty(_cropText) || pictureBox.Image == null) return;
+      if (pictureBox.Image == null) return;
+      if (string.IsNullOrEmpty(_cropText)) return;
 
       var g = e.Graphics;
       using var font = new Font("Segoe UI", 12, FontStyle.Bold);

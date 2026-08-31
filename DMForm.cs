@@ -76,6 +76,10 @@ namespace DMF
     private NumericUpDown videoFps = null!;
     private ComboBox colorMatrix = null!;
     private ComboBox colorRange = null!;
+    private NumericUpDown scaleW = null!;
+    private NumericUpDown scaleH = null!;
+    private CheckBox scaleKeepAspect = null!;
+    private ComboBox scaleResizeAlgo = null!;
     // Audio
     private TextBox audioBitrate = null!;
     private NumericUpDown audioQuality = null!;
@@ -185,13 +189,17 @@ namespace DMF
     public class Settings
     {
       public int WinWidth { get; set; } = 800;
-      public int WinHeight { get; set; } = 500;
+      public int WinHeight { get; set; } = 550;
       public int WinX { get; set; } = -1;
       public int WinY { get; set; } = -1;
       public bool WinMax { get; set; } = false;
       public bool OpenOnSuccess { get; set; } = true;
       public string? FfmpegPath { get; set; } = null;
       public string? FfprobePath { get; set; } = null;
+      public int ScaleWidth { get; set; } = 0;
+      public int ScaleHeight { get; set; } = 0;
+      public string ScaleResizeMode { get; set; } = "lanczos";
+      public bool ScaleKeepAspect { get; set; } = true;
     }
 
     private class UpdateCache
@@ -247,6 +255,10 @@ namespace DMF
       InitializeLayout();
       _ = UpdateInfoTabAsync();
       openOnSuccess.Checked = settings.OpenOnSuccess;
+      scaleW.Value = settings.ScaleWidth;
+      scaleH.Value = settings.ScaleHeight;
+      scaleKeepAspect.Checked = settings.ScaleKeepAspect;
+      scaleResizeAlgo.SelectedItem = settings.ScaleResizeMode ?? "lanczos";
       UpdateProcessButton();
       SetPlaceholders();
       UpdateTimeFields();
@@ -609,7 +621,7 @@ namespace DMF
 
       FormBorderStyle = FormBorderStyle.Sizable;
       MaximizeBox = true;
-      MinimumSize = new Size(800, 500);
+      MinimumSize = new Size(800, 550);
     }
 
     private void SaveSettings()
@@ -625,6 +637,11 @@ namespace DMF
         }
         settings.WinMax = WindowState == FormWindowState.Maximized;
         settings.OpenOnSuccess = openOnSuccess.Checked;
+
+        settings.ScaleWidth = (int)scaleW.Value;
+        settings.ScaleHeight = (int)scaleH.Value;
+        settings.ScaleKeepAspect = scaleKeepAspect.Checked;
+        settings.ScaleResizeMode = scaleResizeAlgo.SelectedItem?.ToString() ?? "lanczos";
 
         string json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
         if (File.Exists(settingsFile))
@@ -877,7 +894,7 @@ namespace DMF
       {
         Dock = DockStyle.Fill,
         ColumnCount = 3,
-        RowCount = 12,
+        RowCount = 13,
         Padding = new Padding(10),
         AutoSize = false
       };
@@ -1082,6 +1099,49 @@ namespace DMF
         "• limited – TV range (16-235) – typical for broadcast\n" +
         "• full – PC range (0-255) – typical for computer monitors\n\n" +
         "Set according to your target display.");
+
+      // Row 11: Scale
+      tableVideo.Controls.Add(new Label { Text = "Scale:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 11);
+
+      var videoScalePanel = new TableLayoutPanel
+      {
+        Dock = DockStyle.Fill,
+        ColumnCount = 6,
+        RowCount = 1,
+        Padding = new Padding(0),
+        MaximumSize = new Size(0, 30)
+      };
+      videoScalePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 30));
+      videoScalePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35));
+      videoScalePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 30));
+      videoScalePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35));
+      videoScalePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 60));
+      videoScalePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20));
+
+      scaleW = new NumericUpDown { Minimum = 0, Maximum = 8192, Value = 0, Increment = 2, Dock = DockStyle.Fill };
+      scaleH = new NumericUpDown { Minimum = 0, Maximum = 8192, Value = 0, Increment = 2, Dock = DockStyle.Fill };
+      scaleKeepAspect = new CheckBox { Text = "Keep", AutoSize = true, Dock = DockStyle.Fill, Checked = true };
+      scaleResizeAlgo = new ComboBox
+      {
+        Dock = DockStyle.Fill,
+        DropDownStyle = ComboBoxStyle.DropDownList,
+        Items = { "lanczos", "bilinear", "bicubic", "neighbor", "area", "gauss", "sinc" },
+        SelectedIndex = 0
+      };
+
+      videoScalePanel.Controls.Add(new Label { Text = "W:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 0);
+      videoScalePanel.Controls.Add(scaleW, 1, 0);
+      videoScalePanel.Controls.Add(new Label { Text = "H:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 2, 0);
+      videoScalePanel.Controls.Add(scaleH, 3, 0);
+      videoScalePanel.Controls.Add(scaleKeepAspect, 4, 0);
+      videoScalePanel.Controls.Add(scaleResizeAlgo, 5, 0);
+
+      tableVideo.Controls.Add(videoScalePanel, 1, 11);
+      var scaleHint = new Label { Text = "0 = auto", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray };
+      tableVideo.Controls.Add(scaleHint, 2, 11);
+      toolTip.SetToolTip(scaleHint,
+        "Keep aspect ratio when only one dimension is set\n" +
+        "Resize algorithm (lanczos = best quality)");
 
       /* Audio */
       var tabAudio = new TabPage("Audio");
@@ -1961,6 +2021,10 @@ namespace DMF
       videoFps.Enabled = encodingEnabled;
       colorMatrix.Enabled = encodingEnabled;
       colorRange.Enabled = encodingEnabled;
+      scaleW.Enabled = encodingEnabled;
+      scaleH.Enabled = encodingEnabled;
+      scaleKeepAspect.Enabled = encodingEnabled;
+      scaleResizeAlgo.Enabled = encodingEnabled;
       videoFilter.Enabled = videoEnabled;
 
       // ------ Audio controls ------
@@ -2220,6 +2284,10 @@ namespace DMF
           pixelFormat.SelectedItem = "yuv420p";
           videoFilter.Text = "scale=2560:-2";
           audioOnly.Checked = false;
+          scaleW.Value = 2560;
+          scaleH.Value = 0;
+          scaleKeepAspect.Checked = true;
+          scaleResizeAlgo.SelectedItem = "lanczos";
           break;
 
         case Preset4K:
@@ -2240,6 +2308,10 @@ namespace DMF
           colorRange.SelectedItem = "limited";
           videoFilter.Text = "scale=3840:-2";
           audioOnly.Checked = false;
+          scaleW.Value = 3840;
+          scaleH.Value = 0;
+          scaleKeepAspect.Checked = true;
+          scaleResizeAlgo.SelectedItem = "lanczos";
           break;
 
         case PresetGif:
@@ -2253,6 +2325,11 @@ namespace DMF
           gifDither.SelectedItem = "bayer";
           gifBayerScale.Value = 5;
           audioOnly.Checked = false;
+          break;
+
+        default:
+          scaleW.Value = 0;
+          scaleH.Value = 0;
           break;
       }
 
@@ -2336,52 +2413,6 @@ namespace DMF
       }
 
       args.Add($"-i \"{inputFile}\"");
-
-      var filterParts = new List<string>();
-      bool isGif = format.SelectedItem?.ToString() == "gif";
-
-      if (isGif)
-      {
-        int fps = (int)gifFps.Value;
-        int w = (int)gifScaleW.Value;
-        int h = (int)gifScaleH.Value;
-
-        filterParts.Add($"fps={fps}");
-
-        string scaleFilter;
-        if (w > 0 && h > 0)
-          scaleFilter = $"scale={w}:{h}";
-        else if (w > 0 && h == 0)
-          scaleFilter = $"scale={w}:-2";
-        else if (h > 0 && w == 0)
-          scaleFilter = $"scale=-2:{h}";
-        else
-          scaleFilter = "scale=-2:-2";
-        filterParts.Add($"{scaleFilter}:flags=lanczos");
-      }
-      else
-      {
-        string vf = videoFilter.Text.Trim();
-        if (!string.IsNullOrEmpty(vf))
-        {
-          var parts = vf.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-          var filtered = new List<string>();
-          foreach (var part in parts)
-          {
-            if (!part.StartsWith("crop", StringComparison.OrdinalIgnoreCase))
-              filtered.Add(part);
-          }
-          if (filtered.Count > 0)
-            filterParts.Add(string.Join(",", filtered));
-        }
-      }
-
-      if (filterParts.Count > 0)
-      {
-        string filters = string.Join(",", filterParts);
-        args.Add($"-vf \"{filters}\"");
-      }
-
       args.Add("-vframes 1");
       args.Add("-f image2");
       args.Add("-vcodec png");
@@ -2479,6 +2510,9 @@ namespace DMF
     {
       if (bitmap == null) return "";
 
+      string resolution = $"{bitmap.Width}x{bitmap.Height}";
+      string cropInfo = "";
+
       int? cropW = null, cropH = null;
       int? cropX = null, cropY = null;
       bool isGif = format.SelectedItem?.ToString() == "gif";
@@ -2514,33 +2548,35 @@ namespace DMF
         }
       }
 
-      if (!cropW.HasValue) return "";
-
-      int w = cropW.Value;
-      int h = cropH.Value;
-      int x, y;
-
-      if (!cropX.HasValue || !cropY.HasValue)
+      if (cropW.HasValue && cropH.HasValue)
       {
-        x = (bitmap.Width - w) / 2;
-        y = (bitmap.Height - h) / 2;
+        int w = cropW.Value;
+        int h = cropH.Value;
+        int x, y;
+
+        if (!cropX.HasValue || !cropY.HasValue)
+        {
+          x = (bitmap.Width - w) / 2;
+          y = (bitmap.Height - h) / 2;
+        }
+        else
+        {
+          x = cropX.Value;
+          y = cropY.Value;
+        }
+
+        if (w == 0) w = bitmap.Width - x;
+        if (h == 0) h = bitmap.Height - y;
+        if (x < 0) x = 0;
+        if (y < 0) y = 0;
+
+        w = Math.Min(w, bitmap.Width - x);
+        h = Math.Min(h, bitmap.Height - y);
+        if (w > 0 && h > 0)
+          cropInfo = $" | crop: {w}x{h} (X={x}, Y={y})";
       }
-      else
-      {
-        x = cropX.Value;
-        y = cropY.Value;
-      }
 
-      if (w == 0) w = bitmap.Width - x;
-      if (h == 0) h = bitmap.Height - y;
-      if (x < 0) x = 0;
-      if (y < 0) y = 0;
-
-      w = Math.Min(w, bitmap.Width - x);
-      h = Math.Min(h, bitmap.Height - y);
-      if (w <= 0 || h <= 0) return "";
-
-      return $"crop: {w}x{h} (X={x}, Y={y})";
+      return resolution + cropInfo;
     }
 
     private void BtnInput_Click(object? sender, EventArgs e)
@@ -3031,6 +3067,13 @@ namespace DMF
                         + $"Codec '{videoCodecSelected}' does not support preset parameter. It will be ignored.";
       }
 
+      // 19. Warning: audio codec - copy and audio filter non
+      if (!string.IsNullOrWhiteSpace(audioFilter.Text) && audioCodecSelected == "copy")
+      {
+        warningMessage += (string.IsNullOrEmpty(warningMessage) ? "" : "\n") +
+                          "Audio filter is active, but codec is set to 'copy'. It will be automatically switched to 'aac' to apply the filter.";
+      }
+
       // Subtitles validation
       if (chkSubtitles.Checked)
       {
@@ -3057,7 +3100,6 @@ namespace DMF
                           + "This is normal and does not affect quality.";
         }
       }
-
 
       if (!string.IsNullOrEmpty(errorMessage))
         Logger.Warning($"Parameter validation error: {errorMessage}");
@@ -3138,6 +3180,12 @@ namespace DMF
 
       string videoCodecSelected = videoCodec.SelectedItem?.ToString() ?? "copy";
       string audioCodecSelected = audioCodec.SelectedItem?.ToString() ?? "copy";
+
+      if (!string.IsNullOrWhiteSpace(audioFilter.Text) && audioCodecSelected == "copy")
+      {
+        audioCodecSelected = "aac";
+        Logger.Info("Audio filter applied, switching audio codec from copy to aac.");
+      }
 
       _cancellationTokenSource = new CancellationTokenSource();
       var token = _cancellationTokenSource.Token;
@@ -3307,8 +3355,35 @@ namespace DMF
           if (audioOnlyChecked)
             argsList.Add("-vn");
 
+          string scaleFilter = "";
+          if (scaleW.Value > 0 || scaleH.Value > 0)
+          {
+            string w = scaleW.Value > 0 ? scaleW.Value.ToString() : "iw";
+            string h = scaleH.Value > 0 ? scaleH.Value.ToString() : "ih";
+            if (scaleKeepAspect.Checked)
+            {
+              if (scaleW.Value > 0 && scaleH.Value == 0)
+                h = "-2";
+              else if (scaleW.Value == 0 && scaleH.Value > 0)
+                w = "-2";
+            }
+            string algo = scaleResizeAlgo.SelectedItem?.ToString() ?? "lanczos";
+            scaleFilter = $"scale={w}:{h}:flags={algo}";
+          }
+
+          string fullVideoFilter = "";
           if (!string.IsNullOrWhiteSpace(videoFilter.Text))
-            argsList.Add($"-vf \"{videoFilter.Text.Trim()}\"");
+          {
+            if (videoFilter.Text.Contains("scale=", StringComparison.OrdinalIgnoreCase))
+              fullVideoFilter = videoFilter.Text.Trim();
+            else
+              fullVideoFilter = string.IsNullOrEmpty(scaleFilter) ? videoFilter.Text.Trim() : $"{scaleFilter},{videoFilter.Text.Trim()}";
+          }
+          else
+            fullVideoFilter = scaleFilter;
+
+          if (!string.IsNullOrEmpty(fullVideoFilter))
+            argsList.Add($"-vf \"{fullVideoFilter}\"");
 
           if (!string.IsNullOrWhiteSpace(audioFilter.Text))
             argsList.Add($"-af \"{audioFilter.Text.Trim()}\"");
