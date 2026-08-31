@@ -86,6 +86,7 @@ namespace DMF
     // Filters
     private TextBox videoFilter = null!;
     private TextBox audioFilter = null!;
+    private CheckBox chkApplyFilters = null;
     // Subtitles
     private CheckBox chkSubtitles = null!;
     private RadioButton rbSubFromInput = null!;
@@ -1185,7 +1186,7 @@ namespace DMF
       {
         Dock = DockStyle.Fill,
         ColumnCount = 3,
-        RowCount = 5,
+        RowCount = 6,
         Padding = new Padding(10),
         AutoSize = false
       };
@@ -1261,6 +1262,24 @@ namespace DMF
       };
       tableFilters.SetColumnSpan(hintAudio, 2);
       tableFilters.Controls.Add(hintAudio, 1, 3);
+
+      // Row 4: Apply filters to preview
+      tableFilters.Controls.Add(new Label { Text = "Preview filters:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 4);
+      chkApplyFilters = new CheckBox
+      {
+        Text = "Apply filters to preview",
+        Dock = DockStyle.Bottom,
+        Checked = false,
+        AutoSize = true,
+        UseCompatibleTextRendering = true,
+        Padding = new Padding(0, 3, 0, 0)
+      };
+      tableFilters.Controls.Add(chkApplyFilters, 1, 4);
+      var hintFilter = new Label { Text = "filter hint", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray };
+      tableFilters.Controls.Add(hintFilter, 2, 4);
+      toolTip.SetToolTip(hintFilter,
+        "Show effect of scale, rotate, etc.\n" +
+        "(Video/GIF frame size is always shown)");
 
       /* Subtitles */
       var tabSubtitles = new TabPage("Subtitles");
@@ -2413,6 +2432,53 @@ namespace DMF
       }
 
       args.Add($"-i \"{inputFile}\"");
+
+      if (chkApplyFilters.Checked)
+      {
+        var filterParts = new List<string>();
+        bool isGif = format.SelectedItem?.ToString() == "gif";
+
+        if (isGif)
+        {
+          int w = (int)gifScaleW.Value;
+          int h = (int)gifScaleH.Value;
+          string crop = gifCrop.Text.Trim();
+
+          if (!string.IsNullOrEmpty(crop) && crop != "w:h:x:y (0 for auto)")
+            filterParts.Add($"crop={crop}");
+
+          string scaleFilter;
+          if (w > 0 && h > 0)
+            scaleFilter = $"scale={w}:{h}";
+          else if (w > 0 && h == 0)
+            scaleFilter = $"scale={w}:-2";
+          else if (h > 0 && w == 0)
+            scaleFilter = $"scale=-2:{h}";
+          else
+            scaleFilter = "scale=-2:-2";
+          filterParts.Add($"{scaleFilter}:flags=lanczos");
+        }
+        else
+        {
+          string vf = videoFilter.Text.Trim();
+          if (!string.IsNullOrEmpty(vf))
+          {
+            var parts = vf.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            foreach (var part in parts)
+            {
+              if (!part.StartsWith("crop", StringComparison.OrdinalIgnoreCase))
+                filterParts.Add(part);
+            }
+          }
+        }
+
+        if (filterParts.Count > 0)
+        {
+          string filters = string.Join(",", filterParts);
+          args.Add($"-vf \"{filters}\"");
+        }
+      }
+
       args.Add("-vframes 1");
       args.Add("-f image2");
       args.Add("-vcodec png");
