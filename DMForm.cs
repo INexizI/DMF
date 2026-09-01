@@ -87,6 +87,7 @@ namespace DMF
     private TextBox videoFilter = null!;
     private TextBox audioFilter = null!;
     private CheckBox chkApplyFilters = null;
+    private ComboBox presetFilters = null!;
     // Subtitles
     private CheckBox chkSubtitles = null!;
     private RadioButton rbSubFromInput = null!;
@@ -184,6 +185,17 @@ namespace DMF
     {
       { "limited", "Limited (TV range 16-235)" },
       { "full", "Full (PC range 0-255)" }
+    };
+    private readonly Dictionary<string, string> filterPresets = new()
+    {
+      { "None", "" },
+      { "Denoise (light)", "hqdn3d=4:3:6:4" },
+      { "Denoise (medium)", "hqdn3d=8:6:12:8" },
+      { "Denoise (strong)", "hqdn3d=16:12:24:16" },
+      { "Sharpen (light)", "unsharp=3:3:0.5:3:3:0.5" },
+      { "Sharpen (medium)", "unsharp=5:5:1.0:5:5:1.0" },
+      { "Blur", "boxblur=2:1" },
+      { "Deinterlace", "yadif=1" }
     };
 
     [Serializable]
@@ -1186,7 +1198,7 @@ namespace DMF
       {
         Dock = DockStyle.Fill,
         ColumnCount = 3,
-        RowCount = 6,
+        RowCount = 7,
         Padding = new Padding(10),
         AutoSize = false
       };
@@ -1198,6 +1210,7 @@ namespace DMF
       // Row 0: Video filter
       tableFilters.Controls.Add(new Label { Text = "Video filter:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 0);
       videoFilter = new TextBox { Dock = DockStyle.Fill, Text = "" };
+      videoFilter.TextChanged += (s, e) => UpdatePresetComboBoxFromFilter();
       tableFilters.Controls.Add(videoFilter, 1, 0);
       Label videoHint = new Label { Text = "e.g. fade=in:0:5", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray };
       tableFilters.Controls.Add(videoHint, 2, 0);
@@ -1263,8 +1276,34 @@ namespace DMF
       tableFilters.SetColumnSpan(hintAudio, 2);
       tableFilters.Controls.Add(hintAudio, 1, 3);
 
-      // Row 4: Apply filters to preview
-      tableFilters.Controls.Add(new Label { Text = "Preview filters:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 4);
+      // Row 4: Preset filters
+      tableFilters.Controls.Add(new Label { Text = "Preset filters:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 4);
+      presetFilters = new ComboBox
+      {
+        Dock = DockStyle.Fill,
+        DropDownStyle = ComboBoxStyle.DropDownList
+      };
+      presetFilters.Items.AddRange(filterPresets.Keys.Cast<object>().ToArray());
+      presetFilters.SelectedIndex = 0;
+      presetFilters.SelectedIndexChanged += PresetFilters_SelectedIndexChanged;
+      tableFilters.Controls.Add(presetFilters, 1, 4);
+      var presetHint = new Label
+      {
+        Text = "common filters",
+        TextAlign = ContentAlignment.MiddleLeft,
+        Dock = DockStyle.Fill,
+        ForeColor = Color.Gray
+      };
+      tableFilters.Controls.Add(presetHint, 2, 4);
+      toolTip.SetToolTip(presetHint,
+        "Select a preset filter to apply to the video.\n\n" +
+        "• Denoise: reduces noise (light/medium/strong).\n" +
+        "• Sharpen: enhances edges (light/medium).\n" +
+        "• Blur: softens image.\n" +
+        "• Deinterlace: removes interlacing.");
+
+      // Row 5: Apply filters to preview
+      tableFilters.Controls.Add(new Label { Text = "Preview filters:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 5);
       chkApplyFilters = new CheckBox
       {
         Text = "Apply filters to preview",
@@ -1274,9 +1313,9 @@ namespace DMF
         UseCompatibleTextRendering = true,
         Padding = new Padding(0, 3, 0, 0)
       };
-      tableFilters.Controls.Add(chkApplyFilters, 1, 4);
+      tableFilters.Controls.Add(chkApplyFilters, 1, 5);
       var hintFilter = new Label { Text = "filter hint", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray };
-      tableFilters.Controls.Add(hintFilter, 2, 4);
+      tableFilters.Controls.Add(hintFilter, 2, 5);
       toolTip.SetToolTip(hintFilter,
         "Show effect of scale, rotate, etc.\n" +
         "(Video/GIF frame size is always shown)");
@@ -1991,6 +2030,7 @@ namespace DMF
         audioQuality.Enabled = false;
         videoFilter.Enabled = false;
         audioFilter.Enabled = false;
+        presetFilters.Enabled = false;
         mapStreams.Enabled = false;
         hwAccel.Enabled = false;
         hwAccelOutput.Enabled = false;
@@ -2045,6 +2085,7 @@ namespace DMF
       scaleKeepAspect.Enabled = encodingEnabled;
       scaleResizeAlgo.Enabled = encodingEnabled;
       videoFilter.Enabled = videoEnabled;
+      presetFilters.Enabled = videoFilter.Enabled;
 
       // ------ Audio controls ------
       bool audioEncoding = audioCodecSelected != "copy";
@@ -2184,6 +2225,31 @@ namespace DMF
       outputFile.Text = GetDefaultOutputPath();
       outputFile.ForeColor = SystemColors.WindowText;
       _autoOutput = true;
+    }
+
+    private void PresetFilters_SelectedIndexChanged(object? sender, EventArgs e)
+    {
+      string preset = presetFilters.SelectedItem?.ToString() ?? "None";
+      if (filterPresets.TryGetValue(preset, out string? filter))
+        videoFilter.Text = filter ?? "";
+    }
+
+    private void UpdatePresetComboBoxFromFilter()
+    {
+      if (presetFilters == null) return;
+      string currentFilter = videoFilter.Text.Trim();
+      int selectedIndex = 0;
+      foreach (var kvp in filterPresets)
+      {
+        if (kvp.Value == currentFilter)
+        {
+          selectedIndex = presetFilters.Items.IndexOf(kvp.Key);
+          break;
+        }
+      }
+      if (selectedIndex < 0) selectedIndex = 0;
+      if (presetFilters.SelectedIndex != selectedIndex)
+        presetFilters.SelectedIndex = selectedIndex;
     }
 
     private static string GetPresetDescription(string presetName)
