@@ -268,10 +268,6 @@ namespace DMF
       InitializeLayout();
       _ = UpdateInfoTabAsync();
       openOnSuccess.Checked = settings.OpenOnSuccess;
-      scaleW.Value = settings.ScaleWidth;
-      scaleH.Value = settings.ScaleHeight;
-      scaleKeepAspect.Checked = settings.ScaleKeepAspect;
-      scaleResizeAlgo.SelectedItem = settings.ScaleResizeMode ?? "lanczos";
       UpdateProcessButton();
       SetPlaceholders();
       UpdateTimeFields();
@@ -650,11 +646,6 @@ namespace DMF
         }
         settings.WinMax = WindowState == FormWindowState.Maximized;
         settings.OpenOnSuccess = openOnSuccess.Checked;
-
-        settings.ScaleWidth = (int)scaleW.Value;
-        settings.ScaleHeight = (int)scaleH.Value;
-        settings.ScaleKeepAspect = scaleKeepAspect.Checked;
-        settings.ScaleResizeMode = scaleResizeAlgo.SelectedItem?.ToString() ?? "lanczos";
 
         string json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
         if (File.Exists(settingsFile))
@@ -1459,25 +1450,37 @@ namespace DMF
       /* GIF */
       var tabGif = new TabPage("GIF");
       tabControl.TabPages.Add(tabGif);
-      var tableGif = new TableLayoutPanel
+      var mainTableGif = new TableLayoutPanel
       {
         Dock = DockStyle.Fill,
-        ColumnCount = 3,
-        RowCount = 7,
+        ColumnCount = 1,
+        RowCount = 2,
         Padding = new Padding(10),
         AutoSize = false
       };
-      for (int i = 0; i < tableGif.RowCount; i++)
-        tableGif.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-      tableGif.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+      mainTableGif.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+      mainTableGif.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+      tabGif.Controls.Add(mainTableGif);
 
-      tableGif.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
-      tableGif.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-      tableGif.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
-      tabGif.Controls.Add(tableGif);
+      // Group 1: Frame Settings
+      var frameGroup = new GroupBox { Text = "Frame Settings", Dock = DockStyle.Fill, Padding = new Padding(5) };
+      mainTableGif.Controls.Add(frameGroup, 0, 0);
+
+      var tableFrame = new TableLayoutPanel
+      {
+        Dock = DockStyle.Fill,
+        ColumnCount = 3,
+        RowCount = 4,
+        Padding = new Padding(5),
+        AutoSize = false
+      };
+      tableFrame.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
+      tableFrame.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+      tableFrame.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
+      frameGroup.Controls.Add(tableFrame);
 
       // Row 0: Output FPS
-      tableGif.Controls.Add(new Label { Text = "Output FPS:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 0);
+      tableFrame.Controls.Add(new Label { Text = "Output FPS:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 0);
       gifFps = new NumericUpDown
       {
         Dock = DockStyle.Fill,
@@ -1486,11 +1489,11 @@ namespace DMF
         Value = 0,
         Increment = 1
       };
-      tableGif.Controls.Add(gifFps, 1, 0);
-      tableGif.Controls.Add(new Label { Text = "0 = source FPS", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 0);
+      tableFrame.Controls.Add(gifFps, 1, 0);
+      tableFrame.Controls.Add(new Label { Text = "0 = source FPS", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 0);
 
       // Row 1: Scale
-      tableGif.Controls.Add(new Label { Text = "Scale:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 1);
+      tableFrame.Controls.Add(new Label { Text = "Scale:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 1);
       var scalePanel = new TableLayoutPanel
       {
         Dock = DockStyle.Fill,
@@ -1511,46 +1514,47 @@ namespace DMF
       scalePanel.Controls.Add(gifScaleW, 1, 0);
       scalePanel.Controls.Add(new Label { Text = "H:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 2, 0);
       scalePanel.Controls.Add(gifScaleH, 3, 0);
-
-      tableGif.Controls.Add(scalePanel, 1, 1);
-      tableGif.Controls.Add(new Label { Text = "0 = auto (keep aspect if set)", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 1);
+      tableFrame.Controls.Add(scalePanel, 1, 1);
+      tableFrame.Controls.Add(new Label { Text = "0 = auto (keep aspect)", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 1);
 
       // Row 2: Crop
-      tableGif.Controls.Add(new Label { Text = "Crop:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 2);
+      tableFrame.Controls.Add(new Label { Text = "Crop:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 2);
       gifCrop = new TextBox
       {
         Dock = DockStyle.Fill,
         ForeColor = Color.Gray,
         Text = "w:h:x:y (0 for auto)"
       };
-
       gifCrop.GotFocus += (s, e) => RemovePlaceholder(gifCrop, "w:h:x:y (0 for auto)");
       gifCrop.LostFocus += (s, e) => RestorePlaceholder(gifCrop, "w:h:x:y (0 for auto)");
-      tableGif.Controls.Add(gifCrop, 1, 2);
+      tableFrame.Controls.Add(gifCrop, 1, 2);
+      tableFrame.Controls.Add(new Label { Text = "e.g. 640:480:0:0", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 2);
 
-      var cropHint = new Label
+      // Group 2: Palette & Dithering
+      var paletteGroup = new GroupBox { Text = "Palette & Dithering", Dock = DockStyle.Fill, Padding = new Padding(5) };
+      mainTableGif.Controls.Add(paletteGroup, 0, 1);
+
+      var tablePalette = new TableLayoutPanel
       {
-        Text = "e.g. 640:480:0:0",
-        TextAlign = ContentAlignment.MiddleLeft,
         Dock = DockStyle.Fill,
-        ForeColor = Color.Gray
+        ColumnCount = 3,
+        RowCount = 4,
+        Padding = new Padding(5),
+        AutoSize = false
       };
-      toolTip.SetToolTip(cropHint,
-        "Crop filter syntax:\n" +
-        "• w:h:x:y – width, height, x offset, y offset\n" +
-        "• Use 0 for auto (e.g. 0:480:0:0 – auto width)\n" +
-        "• iw/ih variables: e.g. iw-100:ih-100:50:50\n" +
-        "• Example: crop=640:480:0:0");
-      tableGif.Controls.Add(cropHint, 2, 2);
+      tablePalette.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
+      tablePalette.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+      tablePalette.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
+      paletteGroup.Controls.Add(tablePalette);
 
-      // Row 3: Palette
-      tableGif.Controls.Add(new Label { Text = "Palette:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 3);
-      chkPalette = new CheckBox { Text = "Use palette generation (better quality)", AutoSize = true, Dock = DockStyle.Fill, Checked = true };
-      tableGif.Controls.Add(chkPalette, 1, 3);
-      tableGif.Controls.Add(new Label { Text = "recommended", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 3);
+      // Row 0: Palette
+      tablePalette.Controls.Add(new Label { Text = "Palette:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 0);
+      chkPalette = new CheckBox { Text = "Generate palette", AutoSize = true, Dock = DockStyle.Fill, Checked = true };
+      tablePalette.Controls.Add(chkPalette, 1, 0);
+      tablePalette.Controls.Add(new Label { Text = "better quality", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 0);
 
-      // Row 4: Dithering
-      tableGif.Controls.Add(new Label { Text = "Dithering:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 4);
+      // Row 1: Dithering
+      tablePalette.Controls.Add(new Label { Text = "Dithering:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 1);
       gifDither = new ComboBox
       {
         Dock = DockStyle.Fill,
@@ -1563,11 +1567,11 @@ namespace DMF
         string dither = gifDither.SelectedItem?.ToString() ?? "";
         gifBayerScale.Enabled = dither == "bayer";
       };
-      tableGif.Controls.Add(gifDither, 1, 4);
-      tableGif.Controls.Add(new Label { Text = "dithering algorithm", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 4);
+      tablePalette.Controls.Add(gifDither, 1, 1);
+      tablePalette.Controls.Add(new Label { Text = "dithering algorithm", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 1);
 
-      // Row 5: Bayer scale
-      tableGif.Controls.Add(new Label { Text = "Bayer scale:", TextAlign = ContentAlignment.BottomRight, Dock = DockStyle.Top }, 0, 5);
+      // Row 2: Bayer scale
+      tablePalette.Controls.Add(new Label { Text = "Bayer scale:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 2);
       gifBayerScale = new NumericUpDown
       {
         Dock = DockStyle.Fill,
@@ -1577,8 +1581,8 @@ namespace DMF
         Increment = 1,
         Enabled = false
       };
-      tableGif.Controls.Add(gifBayerScale, 1, 5);
-      tableGif.Controls.Add(new Label { Text = "0–5 (for Bayer dither)", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 5);
+      tablePalette.Controls.Add(gifBayerScale, 1, 2);
+      tablePalette.Controls.Add(new Label { Text = "0–5 (for Bayer)", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 2);
 
       /* Info */
       var tabInfo = new TabPage("Info");
@@ -2291,6 +2295,10 @@ namespace DMF
           colorRange.SelectedItem = "limited";
           pixelFormat.SelectedItem = "yuv420p";
           audioOnly.Checked = false;
+          scaleW.Value = 0;
+          scaleH.Value = 0;
+          scaleKeepAspect.Checked = true;
+          scaleResizeAlgo.SelectedItem = "lanczos";
           break;
 
         case PresetHD:
@@ -2310,6 +2318,10 @@ namespace DMF
           colorRange.SelectedItem = "limited";
           pixelFormat.SelectedItem = "yuv420p";
           audioOnly.Checked = false;
+          scaleW.Value = 0;
+          scaleH.Value = 0;
+          scaleKeepAspect.Checked = true;
+          scaleResizeAlgo.SelectedItem = "lanczos";
           break;
 
         case PresetMobile:
@@ -2329,6 +2341,10 @@ namespace DMF
           colorRange.SelectedItem = "limited";
           pixelFormat.SelectedItem = "yuv420p";
           audioOnly.Checked = false;
+          scaleW.Value = 0;
+          scaleH.Value = 0;
+          scaleKeepAspect.Checked = true;
+          scaleResizeAlgo.SelectedItem = "lanczos";
           break;
 
         case PresetLossless:
@@ -2348,6 +2364,10 @@ namespace DMF
           colorRange.SelectedItem = "limited";
           pixelFormat.SelectedItem = "yuv444p";
           audioOnly.Checked = false;
+          scaleW.Value = 0;
+          scaleH.Value = 0;
+          scaleKeepAspect.Checked = true;
+          scaleResizeAlgo.SelectedItem = "lanczos";
           break;
 
         case Preset2K:
@@ -2410,6 +2430,10 @@ namespace DMF
           gifDither.SelectedItem = "bayer";
           gifBayerScale.Value = 5;
           audioOnly.Checked = false;
+          scaleW.Value = 0;
+          scaleH.Value = 0;
+          scaleKeepAspect.Checked = true;
+          scaleResizeAlgo.SelectedItem = "lanczos";
           break;
 
         default:
