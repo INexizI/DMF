@@ -100,6 +100,19 @@ namespace DMF
     private TextBox mapStreams = null!;
     private ComboBox hwAccel = null!;
     private ComboBox hwAccelOutput = null!;
+    // Merge
+    private TextBox inputMergeFile = null!;
+    private Button btnMergeInput = null!;
+    private ComboBox mergeMode = null!;
+    private NumericUpDown overlayX = null!;
+    private NumericUpDown overlayY = null!;
+    private CheckBox loopImage = null!;
+    private NumericUpDown mergeScaleW = null!;
+    private NumericUpDown mergeScaleH = null!;
+    private CheckBox mergeKeepAspect = null!;
+    private ComboBox mergeResizeAlgo = null!;
+    private ComboBox mergeAnchor = null!;
+    private Button btnMergePreview = null!;
     // Common
     private Button btnProcess = null!;
     private Button btnCancel = null!;
@@ -1302,7 +1315,7 @@ namespace DMF
         Checked = false,
         AutoSize = true,
         UseCompatibleTextRendering = true,
-        Padding = new Padding(0, 3, 0, 0)
+        Padding = new Padding(0, 5, 0, 0)
       };
       tableFilters.Controls.Add(chkApplyFilters, 1, 5);
       var hintFilter = new Label { Text = "filter hint", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray };
@@ -1446,6 +1459,155 @@ namespace DMF
       hwPanel.Controls.Add(hwAccelOutput, 1, 0);
       tableAdvanced.Controls.Add(hwPanel, 1, 1);
       tableAdvanced.Controls.Add(new Label { Text = "decoder/output", TextAlign = ContentAlignment.BottomLeft, Dock = DockStyle.Top, ForeColor = Color.Gray }, 2, 1);
+
+      /* Merge */
+      var tabMerge = new TabPage("Merge");
+      tabControl.TabPages.Add(tabMerge);
+      var tableMerge = new TableLayoutPanel
+      {
+        Dock = DockStyle.Fill,
+        ColumnCount = 3,
+        RowCount = 8,
+        Padding = new Padding(10),
+        AutoSize = false
+      };
+      tableMerge.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
+      tableMerge.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+      tableMerge.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+      tabMerge.Controls.Add(tableMerge);
+
+      // Row 0: Input file
+      tableMerge.Controls.Add(new Label { Text = "Second file:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 0);
+      inputMergeFile = new TextBox { Dock = DockStyle.Fill };
+      tableMerge.Controls.Add(inputMergeFile, 1, 0);
+      btnMergeInput = new Button { Text = "Browse...", Dock = DockStyle.Fill };
+      btnMergeInput.Click += BtnMergeInput_Click;
+      tableMerge.Controls.Add(btnMergeInput, 2, 0);
+
+      // Row 1: Merge mode
+      tableMerge.Controls.Add(new Label { Text = "Mode:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 1);
+      mergeMode = new ComboBox
+      {
+        Dock = DockStyle.Fill,
+        DropDownStyle = ComboBoxStyle.DropDownList,
+        Items = { "None", "Concatenate", "Side by side (hstack)", "Overlay (image on video)", "Image side by side (video + image)" },
+        SelectedIndex = 0
+      };
+      mergeMode.SelectedIndexChanged += MergeMode_SelectedIndexChanged;
+      tableMerge.Controls.Add(mergeMode, 1, 1);
+      // tableMerge.Controls.Add(new Label { Text = "how to combine", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 1);
+      var modeHint = new Label { Text = "mode info", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray };
+      tableMerge.Controls.Add(modeHint, 2, 1);
+      toolTip.SetToolTip(modeHint,
+        "Concatenate: append second file to first (same codecs/params recommended).\n" +
+        "Side by side: place videos horizontally (same height).\n" +
+        "Overlay: overlay image/video on video with position and anchor.\n" +
+        "Image side by side: video on the left, image scaled to video height on the right.\n" +
+        "Scale, position and anchor apply to Overlay mode.");
+
+      // Row 2: Scale
+      tableMerge.Controls.Add(new Label { Text = "Scale:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 2);
+      var mergeScalePanel = new TableLayoutPanel
+      {
+        Dock = DockStyle.Fill,
+        ColumnCount = 6,
+        RowCount = 1,
+        Padding = new Padding(0),
+        MaximumSize = new Size(0, 30)
+      };
+      mergeScalePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 30));
+      mergeScalePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30));
+      mergeScalePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 30));
+      mergeScalePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30));
+      mergeScalePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 60));
+      mergeScalePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20));
+
+      mergeScaleW = new NumericUpDown { Minimum = 0, Maximum = 8192, Value = 0, Increment = 2, Dock = DockStyle.Fill };
+      mergeScaleH = new NumericUpDown { Minimum = 0, Maximum = 8192, Value = 0, Increment = 2, Dock = DockStyle.Fill };
+      mergeKeepAspect = new CheckBox { Text = "Keep", AutoSize = true, Dock = DockStyle.Fill, Checked = true };
+      mergeResizeAlgo = new ComboBox
+      {
+        Dock = DockStyle.Fill,
+        DropDownStyle = ComboBoxStyle.DropDownList,
+        Items = { "lanczos", "bilinear", "bicubic", "neighbor", "area", "gauss", "sinc" },
+        SelectedIndex = 0
+      };
+
+      mergeScalePanel.Controls.Add(new Label { Text = "W:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 0);
+      mergeScalePanel.Controls.Add(mergeScaleW, 1, 0);
+      mergeScalePanel.Controls.Add(new Label { Text = "H:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 2, 0);
+      mergeScalePanel.Controls.Add(mergeScaleH, 3, 0);
+      mergeScalePanel.Controls.Add(mergeKeepAspect, 4, 0);
+      mergeScalePanel.Controls.Add(mergeResizeAlgo, 5, 0);
+
+      tableMerge.Controls.Add(mergeScalePanel, 1, 2);
+      tableMerge.Controls.Add(new Label { Text = "0 = auto", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 2);
+
+      // Row 3: Position
+      tableMerge.Controls.Add(new Label { Text = "Position:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 3);
+      var posPanel = new TableLayoutPanel
+      {
+        Dock = DockStyle.Fill,
+        ColumnCount = 4,
+        RowCount = 1,
+        Padding = new Padding(0),
+        MaximumSize = new Size(0, 30)
+      };
+      posPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 30));
+      posPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30));
+      posPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 30));
+      posPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30));
+
+      overlayX = new NumericUpDown { Minimum = 0, Maximum = 8192, Value = 0, Increment = 1, Dock = DockStyle.Fill, Enabled = false };
+      overlayY = new NumericUpDown { Minimum = 0, Maximum = 8192, Value = 0, Increment = 1, Dock = DockStyle.Fill, Enabled = false };
+
+      posPanel.Controls.Add(new Label { Text = "X:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 0);
+      posPanel.Controls.Add(overlayX, 1, 0);
+      posPanel.Controls.Add(new Label { Text = "Y:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 2, 0);
+      posPanel.Controls.Add(overlayY, 3, 0);
+
+      tableMerge.Controls.Add(posPanel, 1, 3);
+      tableMerge.Controls.Add(new Label { Text = "pixels offset", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 2, 3);
+
+      // Row 4: Anchor
+      tableMerge.Controls.Add(new Label { Text = "Anchor:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 4);
+      mergeAnchor = new ComboBox
+      {
+        Dock = DockStyle.Fill,
+        DropDownStyle = ComboBoxStyle.DropDownList,
+        Items = { "Top-Left", "Top-Right", "Bottom-Left", "Bottom-Right", "Center" },
+        SelectedIndex = 0,
+        Enabled = false
+      };
+      tableMerge.Controls.Add(mergeAnchor, 1, 4);
+
+      // Row 5: Loop image
+      tableMerge.Controls.Add(new Label { Text = "Loop image:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 5);
+      loopImage = new CheckBox
+      {
+        Text = "Loop image to video duration",
+        Dock = DockStyle.Fill,
+        Checked = true,
+        Enabled = false,
+        AutoSize = true,
+        UseCompatibleTextRendering = true,
+        Padding = new Padding(0, 5, 0, 0)
+      };
+      tableMerge.Controls.Add(loopImage, 1, 5);
+
+      // Row 6: Preview button
+      tableMerge.Controls.Add(new Label { Text = "Preview:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 0, 6);
+      btnMergePreview = new Button
+      {
+        Text = "Preview Merge",
+        Dock = DockStyle.Fill,
+        BackColor = Color.LightSkyBlue,
+        AutoSize = false,
+        Height = 30,
+        Enabled = false
+      };
+      btnMergePreview.Click += BtnMergePreview_Click;
+      tableMerge.Controls.Add(btnMergePreview, 1, 6);
 
       /* GIF */
       var tabGif = new TabPage("GIF");
@@ -1888,6 +2050,7 @@ namespace DMF
       SetPlaceholder(outputFile, OutputPlaceholder);
       SetPlaceholder(startTime, TimePlaceholder);
       SetPlaceholder(endTime, TimePlaceholder);
+      SetPlaceholder(inputMergeFile, "Select second file...");
     }
 
     private static void SetPlaceholder(TextBox tb, string placeholder)
@@ -1999,7 +2162,11 @@ namespace DMF
     {
       bool inputValid = !string.IsNullOrWhiteSpace(inputFile.Text) && !IsPlaceholder(inputFile, InputPlaceholder);
       bool outputValid = !string.IsNullOrWhiteSpace(outputFile.Text) && !IsPlaceholder(outputFile, OutputPlaceholder);
-      btnProcess.Enabled = inputValid && outputValid;
+      bool mergeValid = true;
+      string mergeModeStr = mergeMode.SelectedItem?.ToString() ?? "None";
+      if (mergeModeStr != "None")
+        mergeValid = !string.IsNullOrWhiteSpace(inputMergeFile.Text) && !IsPlaceholder(inputMergeFile, "Select second file...") && File.Exists(inputMergeFile.Text);
+      btnProcess.Enabled = inputValid && outputValid && mergeValid;
     }
 
     private void TrimMode_SelectedIndexChanged(object? sender, EventArgs e)
@@ -2096,11 +2263,6 @@ namespace DMF
       audioBitrate.Enabled = audioEncoding;
       audioQuality.Enabled = audioEncoding;
 
-      // ------ Advanced controls ------
-      mapStreams.Enabled = true;
-      hwAccel.Enabled = true;
-      hwAccelOutput.Enabled = hwAccel.SelectedIndex != 0;
-
       // ------ Subtitles controls ------
       bool subtitlesEnabled = chkSubtitles.Checked && !audioOnlyChecked && videoEnabled;
       chkSubtitles.Enabled = !audioOnlyChecked;
@@ -2110,6 +2272,37 @@ namespace DMF
       subExternalFile.Enabled = subtitlesEnabled && rbSubExternal.Checked;
       btnSubBrowse.Enabled = subtitlesEnabled && rbSubExternal.Checked;
       chkSubCopy.Enabled = subtitlesEnabled;
+
+      // ------ Advanced controls ------
+      mapStreams.Enabled = true;
+      hwAccel.Enabled = true;
+      hwAccelOutput.Enabled = hwAccel.SelectedIndex != 0;
+
+      // ------ Merge controls ------
+      bool mergeEnabled = !audioOnly.Checked && format.SelectedItem?.ToString() != "gif";
+      inputMergeFile.Enabled = mergeEnabled;
+      btnMergeInput.Enabled = mergeEnabled;
+      mergeMode.Enabled = mergeEnabled;
+
+      bool isOverlayMode = mergeEnabled && mergeMode.SelectedItem?.ToString() == "Overlay (image on video)";
+      bool isConcat = mergeEnabled && mergeMode.SelectedItem?.ToString() == "Concatenate";
+      overlayX.Enabled = isOverlayMode;
+      overlayY.Enabled = isOverlayMode;
+      loopImage.Enabled = isOverlayMode;
+      mergeAnchor.Enabled = isOverlayMode;
+      mergeScaleW.Enabled = mergeEnabled && !isConcat;
+      mergeScaleH.Enabled = mergeEnabled && !isConcat;
+      mergeKeepAspect.Enabled = mergeEnabled && !isConcat;
+      mergeResizeAlgo.Enabled = mergeEnabled && !isConcat;
+
+      btnMergePreview.Enabled = mergeEnabled &&
+                                !isConcat &&
+                                !string.IsNullOrWhiteSpace(inputFile.Text) &&
+                                !IsPlaceholder(inputFile, InputPlaceholder) &&
+                                File.Exists(inputFile.Text) &&
+                                !string.IsNullOrWhiteSpace(inputMergeFile.Text) &&
+                                !IsPlaceholder(inputMergeFile, "Select second file...") &&
+                                File.Exists(inputMergeFile.Text);
 
       // ------ Preview controls ------
       bool previewEnabled = !audioOnly.Checked &&
@@ -2450,6 +2643,119 @@ namespace DMF
       UpdateCodecHints();
     }
 
+    private void BtnMergeInput_Click(object? sender, EventArgs e)
+    {
+      using var file = new OpenFileDialog();
+      file.Title = "Select second file";
+      file.Filter = "Media files|*.mp4;*.avi;*.mkv;*.mov;*.wmv;*.flv;*.webm;*.png;*.jpg;*.jpeg;*.bmp;*.gif|All files|*.*";
+      if (file.ShowDialog() == DialogResult.OK)
+      {
+        inputMergeFile.Text = file.FileName;
+        inputMergeFile.ForeColor = SystemColors.WindowText;
+        UpdateProcessButton();
+      }
+    }
+
+    private void MergeMode_SelectedIndexChanged(object? sender, EventArgs e)
+    {
+      string mode = mergeMode.SelectedItem?.ToString() ?? "None";
+      bool isOverlay = mode == "Overlay (image on video)";
+      bool isSideBySide = mode == "Side by side (hstack)" || mode == "Image side by side (video + image)";
+      bool isConcat = mode == "Concatenate";
+
+      overlayX.Enabled = isOverlay;
+      overlayY.Enabled = isOverlay;
+      loopImage.Enabled = isOverlay;
+      mergeAnchor.Enabled = isOverlay;
+      mergeScaleW.Enabled = !isConcat;
+      mergeScaleH.Enabled = !isConcat;
+      mergeKeepAspect.Enabled = !isConcat;
+      mergeResizeAlgo.Enabled = !isConcat;
+
+      if (!isOverlay)
+      {
+        overlayX.Value = 10;
+        overlayY.Value = 10;
+        loopImage.Checked = true;
+        mergeAnchor.SelectedIndex = 0;
+      }
+
+      btnMergePreview.Enabled = !isConcat && File.Exists(inputFile.Text) && File.Exists(inputMergeFile.Text);
+    }
+
+    private async void BtnMergePreview_Click(object? sender, EventArgs e)
+    {
+      if (string.IsNullOrWhiteSpace(inputFile.Text) || IsPlaceholder(inputFile, InputPlaceholder) || !File.Exists(inputFile.Text) ||
+          string.IsNullOrWhiteSpace(inputMergeFile.Text) || IsPlaceholder(inputMergeFile, "Select second file...") || !File.Exists(inputMergeFile.Text))
+      {
+        MessageBox.Show("Select both input files first.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        return;
+      }
+
+      string mode = mergeMode.SelectedItem?.ToString() ?? "None";
+      if (mode == "None")
+      {
+        MessageBox.Show("Select a merge mode.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        return;
+      }
+
+      btnMergePreview.Enabled = false;
+      status.Text = "Loading merge preview...";
+      progressBar.Visible = true;
+      progressBar.Style = ProgressBarStyle.Marquee;
+
+      try
+      {
+        string tempFile = Path.GetTempFileName() + ".png";
+        string ffmpegArgs = BuildMergePreviewArgs(inputFile.Text, inputMergeFile.Text, tempFile);
+        await RunFFmpeg(FfmpegExecutable, ffmpegArgs, CancellationToken.None, 0, null);
+
+        using (var img = Image.FromFile(tempFile))
+        {
+          var bitmap = new Bitmap(img);
+          if (_previewForm == null || _previewForm.IsDisposed)
+          {
+            _previewForm = new PreviewForm { Owner = this };
+            _previewForm.FormClosed += (s, args) =>
+            {
+              btnUpdatePreview.Text = "Open Preview";
+              _previewForm = null;
+            };
+            btnUpdatePreview.Text = "Update Preview";
+          }
+          string info = $"Merge preview: {bitmap.Width}x{bitmap.Height}";
+          _previewForm.UpdateImage(bitmap, info);
+          _previewForm.Show();
+          _previewForm.BringToFront();
+        }
+        File.Delete(tempFile);
+        status.Text = "Merge preview ready";
+      }
+      catch (Exception ex)
+      {
+        status.Text = "Preview error";
+        MessageBox.Show($"Preview failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+      }
+      finally
+      {
+        btnMergePreview.Enabled = true;
+        progressBar.Visible = false;
+      }
+    }
+
+    private static string GetAnchorExpression(string anchor, int x, int y)
+    {
+      return anchor switch
+      {
+        "Top-Left" => $"{x}:{y}",
+        "Top-Right" => $"W-w-{x}:{y}",
+        "Bottom-Left" => $"{x}:H-h-{y}",
+        "Bottom-Right" => $"W-w-{x}:H-h-{y}",
+        "Center" => $"(W-w)/2+{x}:(H-h)/2+{y}",
+        _ => $"{x}:{y}"
+      };
+    }
+
     private List<string> BuildGifArgs()
     {
       var args = new List<string>();
@@ -2567,6 +2873,82 @@ namespace DMF
           string filters = string.Join(",", filterParts);
           args.Add($"-vf \"{filters}\"");
         }
+      }
+
+      args.Add("-vframes 1");
+      args.Add("-f image2");
+      args.Add("-vcodec png");
+      args.Add($"\"{tempFile}\"");
+
+      return string.Join(" ", args);
+    }
+
+    private string BuildMergeFilter(string mode, bool preview = false)
+    {
+      string scale2 = "";
+      int w = (int)mergeScaleW.Value;
+      int h = (int)mergeScaleH.Value;
+      string algo = mergeResizeAlgo.SelectedItem?.ToString() ?? "lanczos";
+      if (w > 0 || h > 0)
+      {
+        string sw = w > 0 ? w.ToString() : "iw";
+        string sh = h > 0 ? h.ToString() : "ih";
+        if (mergeKeepAspect.Checked)
+        {
+          if (w > 0 && h == 0) sh = "-2";
+          else if (w == 0 && h > 0) sw = "-2";
+        }
+        scale2 = $"scale={sw}:{sh}:flags={algo}";
+      }
+
+      string filterComplex = "";
+      if (mode == "Concatenate")
+      {
+        if (preview)
+          filterComplex = "[0:v][1:v]concat=n=2:v=1:a=0[outv]";
+        else
+          filterComplex = "[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[outv][outa]";
+      }
+      else if (mode == "Side by side (hstack)")
+      {
+        string scale1 = "[0:v]scale=iw:ih[v0]";
+        string scale2part = string.IsNullOrEmpty(scale2) ? "[1:v]scale=iw:ih[v1]" : $"[1:v]{scale2}[v1]";
+        filterComplex = $"{scale1};{scale2part};[v0][v1]hstack=inputs=2[outv]";
+      }
+      else if (mode == "Overlay (image on video)")
+      {
+        int x = (int)overlayX.Value;
+        int y = (int)overlayY.Value;
+        string anchor = mergeAnchor.SelectedItem?.ToString() ?? "Top-Left";
+        string anchorExpr = GetAnchorExpression(anchor, x, y);
+        bool loop = loopImage.Checked;
+
+        string scale2part = string.IsNullOrEmpty(scale2) ? "[1:v]" : $"[1:v]{scale2}";
+        string loopPart = loop ? ",loop=-1:size=1,setpts=PTS-STARTPTS" : "";
+        filterComplex = $"{scale2part}{loopPart}[fg];[0:v][fg]overlay={anchorExpr}[outv]";
+      }
+      else if (mode == "Image side by side (video + image)")
+      {
+        string scale2part = string.IsNullOrEmpty(scale2) ? "scale=ih:ih" : scale2;
+        filterComplex = $"[0:v]scale=iw:ih[vid];[1:v]{scale2part}[img];[vid]pad=iw*2:ih:0:0[bg];[bg][img]overlay=W/2:0[outv]";
+      }
+
+      return filterComplex;
+    }
+
+    private string BuildMergePreviewArgs(string input1, string input2, string tempFile)
+    {
+      var args = new List<string>();
+      string mode = mergeMode.SelectedItem?.ToString() ?? "None";
+
+      args.Add($"-i \"{input1}\"");
+      args.Add($"-i \"{input2}\"");
+
+      string filterComplex = BuildMergeFilter(mode, preview: true);
+      if (!string.IsNullOrEmpty(filterComplex))
+      {
+        args.Add($"-filter_complex \"{filterComplex}\"");
+        args.Add("-map \"[outv]\"");
       }
 
       args.Add("-vframes 1");
@@ -3568,9 +3950,7 @@ namespace DMF
             else if (rbSubExternal.Checked && !string.IsNullOrWhiteSpace(subExternalFile.Text) && File.Exists(subExternalFile.Text))
             {
               if (string.IsNullOrWhiteSpace(mapStreams.Text))
-              {
                 argsList.Add("-map 0:v -map 0:a");
-              }
 
               string inputArg = $"-i \"{inputFile.Text}\"";
               int mainInputIndex = -1;
@@ -3591,6 +3971,18 @@ namespace DMF
               }
             }
           }
+        }
+
+        string mergeModeStr = mergeMode.SelectedItem?.ToString() ?? "None";
+        if (mergeModeStr != "None" && !string.IsNullOrWhiteSpace(inputMergeFile.Text) && File.Exists(inputMergeFile.Text))
+        {
+          await ProcessMergeAsync(ffmpegPath, mergeModeStr, token);
+          status.Text = "Done!";
+          Logger.Info($"Merge finished successfully: '{outputFile.Text}'");
+          MessageBox.Show("Processing completed successfully!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+          if (openOnSuccess.Checked)
+            OpenFolder(outputFile.Text);
+          return;
         }
 
         argsList.Add($"\"{outputFile.Text}\"");
@@ -3675,6 +4067,79 @@ namespace DMF
         Application.DoEvents();
         UpdateProcessButton();
       }
+    }
+
+    private async Task ProcessMergeAsync(string ffmpegPath, string mode, CancellationToken token)
+    {
+      var argsList = new List<string>();
+
+      if (overwrite.Checked)
+        argsList.Add("-y");
+
+      argsList.Add($"-i \"{inputFile.Text}\"");
+      argsList.Add($"-i \"{inputMergeFile.Text}\"");
+
+      string output = outputFile.Text;
+
+      string vcodec = videoCodec.SelectedItem?.ToString() ?? "libx264";
+      if (vcodec == "copy") vcodec = "libx264";
+      string acodec = audioCodec.SelectedItem?.ToString() ?? "aac";
+      if (acodec == "copy") acodec = "aac";
+
+      string filterComplex = BuildMergeFilter(mode, preview: false);
+      if (string.IsNullOrEmpty(filterComplex))
+      {
+        Logger.Error("Merge filter is empty, cannot process.");
+        throw new InvalidOperationException("Merge filter is empty.");
+      }
+      if (!string.IsNullOrEmpty(filterComplex))
+      {
+        argsList.Add($"-filter_complex \"{filterComplex}\"");
+        if (mode == "Concatenate")
+        {
+          argsList.Add("-map \"[outv]\"");
+          argsList.Add("-map \"[outa]\"");
+        }
+        else
+        {
+          argsList.Add("-map \"[outv]\"");
+          argsList.Add("-map 0:a?");
+        }
+        argsList.Add($"-c:v {vcodec}");
+        argsList.Add($"-c:a {acodec}");
+        if (crf.Value > 0 && vcodec != "copy")
+          argsList.Add($"-crf {crf.Value}");
+        if (!string.IsNullOrWhiteSpace(videoBitrate.Text))
+          argsList.Add($"-b:v {videoBitrate.Text.Trim()}");
+        if (!string.IsNullOrWhiteSpace(audioBitrate.Text))
+          argsList.Add($"-b:a {audioBitrate.Text.Trim()}");
+        if (mode == "Overlay (image on video)")
+          argsList.Add("-shortest");
+      }
+
+      argsList.Add($"\"{output}\"");
+
+      string args = string.Join(" ", argsList);
+      string fullCommand = $"\"{ffmpegPath}\" {args}";
+      Logger.Debug($"FFmpeg merge command: {fullCommand}");
+
+      await RunFFmpeg(ffmpegPath, args, token, inputDuration, (percent, _) =>
+      {
+        Invoke(() =>
+        {
+          if (percent > 0)
+          {
+            progressBar.Style = ProgressBarStyle.Continuous;
+            progressBar.Value = Math.Min(percent, 100);
+            status.Text = $"Merging... {percent}%";
+          }
+          else
+          {
+            progressBar.Style = ProgressBarStyle.Marquee;
+            status.Text = "Merging...";
+          }
+        });
+      });
     }
 
     private void BtnCancel_Click(object? sender, EventArgs e)
