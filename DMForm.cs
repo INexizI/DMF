@@ -129,6 +129,7 @@ namespace DMF
     private ComboBox gifDither = null!;
     private NumericUpDown gifBayerScale = null!;
     private Button btnUpdatePreview = null!;
+    private Button btnReset = null!;
     private string? previewTempFile = null;
     private PreviewForm? _previewForm = null;
     private bool _updatingFormatFromPath = false;
@@ -1601,7 +1602,7 @@ namespace DMF
       {
         Text = "Preview Merge",
         Dock = DockStyle.Fill,
-        BackColor = Color.LightSkyBlue,
+        BackColor = Color.LightSteelBlue,
         AutoSize = false,
         Height = 30,
         Enabled = false
@@ -1934,12 +1935,13 @@ namespace DMF
       var actionPanel = new TableLayoutPanel
       {
         Dock = DockStyle.Fill,
-        ColumnCount = 3,
+        ColumnCount = 4,
         RowCount = 1,
         Padding = new Padding(0)
       };
       actionPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
       actionPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+      actionPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
       actionPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
       bottomLayout.Controls.Add(actionPanel, 0, 1);
 
@@ -1972,6 +1974,16 @@ namespace DMF
       };
       actionPanel.Controls.Add(status, 1, 0);
 
+      btnReset = new Button
+      {
+        Text = "Reset",
+        Dock = DockStyle.Fill,
+        BackColor = Color.LightSkyBlue,
+        AutoSize = false
+      };
+      btnReset.Click += BtnReset_Click;
+      actionPanel.Controls.Add(btnReset, 2, 0);
+
       btnUpdatePreview = new Button
       {
         Text = "Open Preview",
@@ -1980,7 +1992,7 @@ namespace DMF
         BackColor = Color.LightSkyBlue,
         Enabled = false
       };
-      actionPanel.Controls.Add(btnUpdatePreview, 2, 0);
+      actionPanel.Controls.Add(btnUpdatePreview, 3, 0);
 
       btnInput.Click += BtnInput_Click;
       btnOutput.Click += BtnOutput_Click;
@@ -2674,8 +2686,8 @@ namespace DMF
 
       if (!isOverlay)
       {
-        overlayX.Value = 10;
-        overlayY.Value = 10;
+        overlayX.Value = 0;
+        overlayY.Value = 0;
         loopImage.Checked = true;
         mergeAnchor.SelectedIndex = 0;
       }
@@ -2767,7 +2779,9 @@ namespace DMF
       string dither = gifDither.SelectedItem?.ToString() ?? "floyd_steinberg";
       string crop = gifCrop.Text.Trim();
 
-      var filterParts = new List<string> { $"fps={fps}" };
+      var filterParts = new List<string>();
+      if (fps > 0)
+        filterParts.Add($"fps={fps}");
 
       if (!string.IsNullOrEmpty(crop) && crop != "w:h:x:y (0 for auto)")
         filterParts.Add($"crop={crop}");
@@ -2836,9 +2850,13 @@ namespace DMF
 
         if (isGif)
         {
+          int fps = (int)gifFps.Value;
           int w = (int)gifScaleW.Value;
           int h = (int)gifScaleH.Value;
           string crop = gifCrop.Text.Trim();
+
+          if (fps > 0)
+            filterParts.Add($"fps={fps}");
 
           if (!string.IsNullOrEmpty(crop) && crop != "w:h:x:y (0 for auto)")
             filterParts.Add($"crop={crop}");
@@ -3153,6 +3171,8 @@ namespace DMF
         UpdateProcessButton();
       }
     }
+
+    private void BtnReset_Click(object? sender, EventArgs e) => ResetAllFields();
 
     private async void BtnUpdatePreview_Click(object? sender, EventArgs e)
     {
@@ -4285,6 +4305,98 @@ namespace DMF
         string relevant = ExtractRelevantError(fullError);
         throw new Exception(relevant);
       }
+    }
+
+    private void ResetAllFields()
+    {
+      /* Basic */
+      inputFile.Text = "";
+      outputFile.Text = "";
+      SetPlaceholder(inputFile, InputPlaceholder);
+      SetPlaceholder(outputFile, OutputPlaceholder);
+      format.SelectedIndex = 0;
+      trimMode.SelectedIndex = 0;
+      SetPlaceholder(startTime, TimePlaceholder);
+      SetPlaceholder(endTime, TimePlaceholder);
+      videoCodec.SelectedIndex = 0;
+      audioCodec.SelectedIndex = 0;
+      _autoOutput = false;
+      /* Video */
+      crf.Value = 23;
+      preset.SelectedIndex = 5;
+      pixelFormat.SelectedIndex = 0;
+      videoBitrate.Text = "";
+      maxrate.Text = "";
+      bufsize.Text = "";
+      profile.SelectedIndex = 1;
+      gop.Value = 0;
+      videoFps.Value = 0;
+      colorMatrix.SelectedIndex = 0;
+      colorRange.SelectedIndex = 0;
+      scaleW.Value = 0;
+      scaleH.Value = 0;
+      scaleKeepAspect.Checked = true;
+      scaleResizeAlgo.SelectedIndex = 0;
+      /* Audio */
+      audioBitrate.Text = "";
+      audioQuality.Value = 2;
+      /* Filters */
+      videoFilter.Text = "";
+      audioFilter.Text = "";
+      chkApplyFilters.Checked = false;
+      presetFilters.SelectedIndex = 0;
+      /* Subtitles */
+      chkSubtitles.Checked = false;
+      rbSubFromInput.Checked = true;
+      rbSubExternal.Checked = false;
+      subTrackNumber.Value = 0;
+      subExternalFile.Text = "";
+      chkSubCopy.Checked = true;
+      subTrackNumber.Enabled = true;
+      subExternalFile.Enabled = false;
+      btnSubBrowse.Enabled = false;
+      /* Advanced */
+      mapStreams.Text = "";
+      hwAccel.SelectedIndex = 0;
+      hwAccelOutput.SelectedIndex = 0;
+      /* Merge */
+      SetPlaceholder(inputMergeFile, "Select second file...");
+      mergeMode.SelectedIndex = 0;
+      overlayX.Value = 0;
+      overlayY.Value = 0;
+      loopImage.Checked = true;
+      mergeAnchor.SelectedIndex = 0;
+      mergeScaleW.Value = 0;
+      mergeScaleH.Value = 0;
+      mergeKeepAspect.Checked = true;
+      mergeResizeAlgo.SelectedIndex = 0;
+      MergeMode_SelectedIndexChanged(this, EventArgs.Empty);
+      /* GIF */
+      gifFps.Value = 0;
+      gifScaleW.Value = 0;
+      gifScaleH.Value = 0;
+      gifCrop.Text = "w:h:x:y (0 for auto)";
+      gifCrop.ForeColor = Color.Gray;
+      chkPalette.Checked = true;
+      gifDither.SelectedIndex = 0;
+      gifBayerScale.Value = 5;
+      gifBayerScale.Enabled = false;
+      /* Close preview */
+      if (_previewForm != null && !_previewForm.IsDisposed)
+      {
+        _previewForm.Close();
+        _previewForm = null;
+        btnUpdatePreview.Text = "Open Preview";
+      }
+      /* Update state */
+      UpdateTimeFields();
+      UpdateControlStates();
+      UpdateProcessButton();
+      UpdateCodecHints();
+      /* Status */
+      status.Text = "Reset to default";
+      progressBar.Visible = false;
+      progressBar.Value = 0;
     }
 
     private void DeleteIncompleteOutput()
