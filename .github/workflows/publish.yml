@@ -12,9 +12,9 @@ on:
         required: true
         default: false
       version:
-        description: "Release version tag (e.g. v1.0.0)"
+        description: "Override version (optional, e.g. v1.0.0)"
         required: false
-        default: "v0.1.0"
+        default: ""
 
 permissions:
   contents: write
@@ -25,20 +25,28 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "10.x"
 
-      - name: Get version from tag
-        id: get_version
+      - name: Get version
+        id: version
+        shell: pwsh
         run: |
-          if ("${{ github.event_name }}" -eq "push" -and "${{ startsWith(github.ref, 'refs/tags/') }}" -eq "True") {
+          if ("${{ github.event_name }}" -eq "push" -and "${{ github.ref_type }}" -eq "tag") {
             $tag = "${{ github.ref_name }}"
-          } else {
+          } elseif ("${{ github.event.inputs.version }}" -ne "") {
             $tag = "${{ github.event.inputs.version }}"
+          } else {
+            $csproj = Get-Content DMF.csproj | Select-String '<Version>(.*?)<\/Version>'
+            if ($csproj) {
+              $tag = "v" + $csproj.Matches.Groups[1].Value
+            } else {
+              $tag = "v0.0.0"
+            }
           }
           $version = $tag -replace '^v', ''
           echo "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
@@ -48,7 +56,8 @@ jobs:
         run: |
           dotnet publish -c Release -r win-x64 --self-contained true `
             -p:PublishSingleFile=true `
-            -p:DebugType=none `
+            -p:DebugType=embedded `
+            -p:DebugSymbols=false `
             -p:Version=${{ env.VERSION }} `
             -o ./publish
 
@@ -58,18 +67,23 @@ jobs:
           Compress-Archive -Path ./publish/* -DestinationPath $zipName
           echo "ZIP_NAME=$zipName" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Upload build artifact (for debugging)
+      - name: Upload artifact (optional, for debugging)
         uses: actions/upload-artifact@v4
         with:
           name: DMF-${{ env.VERSION }}-win-x64
           path: ./publish
 
       - name: Create GitHub Release
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && github.event.inputs.make_release == 'true')
-        uses: softprops/action-gh-release@v1
+        if: |
+          github.event_name == 'push' && github.ref_type == 'tag' ||
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.make_release == 'true')
+        uses: softprops/action-gh-release@v2
         with:
           files: ${{ env.ZIP_NAME }}
           generate_release_notes: true
           tag_name: ${{ env.TAG }}
+          name: DMF ${{ env.VERSION }}
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
