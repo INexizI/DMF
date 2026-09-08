@@ -118,6 +118,8 @@ namespace DMF
     private Button btnCancel = null!;
     private Label status = null!;
     private ProgressBar progressBar = null!;
+    private System.Windows.Forms.Timer? _animationTimer;
+    private int _animationDotCount;
     private bool _autoOutput = false;
     private ToolTip toolTip = new ToolTip();
     private double inputDuration = 0;
@@ -3751,6 +3753,18 @@ namespace DMF
       btnProcess.Visible = false;
       btnCancel.Visible = true;
       btnCancel.Enabled = true;
+      if (_animationTimer == null)
+      {
+        _animationTimer = new System.Windows.Forms.Timer() { Interval = 500 };
+        _animationTimer.Tick += (s, e) =>
+        {
+          _animationDotCount = (_animationDotCount + 1) % 4;
+          string dots = new string('.', _animationDotCount);
+          btnCancel.Text = $"Cancel{dots}";
+        };
+      }
+      _animationDotCount = 0;
+      _animationTimer.Start();
       btnProcess.Enabled = false;
       progressBar.Visible = true;
       progressBar.Style = ProgressBarStyle.Marquee;
@@ -4080,6 +4094,8 @@ namespace DMF
         btnCancel.Visible = false;
         btnCancel.Enabled = false;
         btnProcess.Enabled = true;
+        _animationTimer?.Stop();
+        btnCancel.Text = "Cancel";
         progressBar.Style = ProgressBarStyle.Marquee;
         progressBar.Value = 0;
         progressBar.Visible = false;
@@ -4165,7 +4181,9 @@ namespace DMF
     private void BtnCancel_Click(object? sender, EventArgs e)
     {
       _cancellationTokenSource?.Cancel();
+      _animationTimer?.Stop();
       btnCancel.Enabled = false;
+      btnCancel.Text = "Cancel";
     }
 
     private static string ExtractRelevantError(string fullError)
