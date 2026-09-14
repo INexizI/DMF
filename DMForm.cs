@@ -114,10 +114,12 @@ namespace DMF
     private ComboBox mergeAnchor = null!;
     private Button btnMergePreview = null!;
     // Common
+    private ProgressBar progressBar = null!;
     private Button btnProcess = null!;
     private Button btnCancel = null!;
     private Label status = null!;
-    private ProgressBar progressBar = null!;
+    private Button btnReset = null!;
+    private Button btnUpdatePreview = null!;
     private System.Windows.Forms.Timer? _animationTimer;
     private int _animationDotCount;
     private bool _autoOutput = false;
@@ -130,8 +132,6 @@ namespace DMF
     private CheckBox chkPalette = null!;
     private ComboBox gifDither = null!;
     private NumericUpDown gifBayerScale = null!;
-    private Button btnUpdatePreview = null!;
-    private Button btnReset = null!;
     private string? previewTempFile = null;
     private PreviewForm? _previewForm = null;
     private bool _updatingFormatFromPath = false;
