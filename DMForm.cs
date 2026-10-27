@@ -113,6 +113,7 @@ namespace DMF
     private ComboBox mergeResizeAlgo = null!;
     private ComboBox mergeAnchor = null!;
     private Button btnMergePreview = null!;
+    private CheckBox chkConcatNormalize = null!;
     // Common
     private ProgressBar progressBar = null!;
     private Button btnProcess = null!;
@@ -289,7 +290,7 @@ namespace DMF
       UpdateTimeFields();
       UpdateCodecHints();
 
-      this.Shown += async (s, e) => await CheckForUpdatesAsync();
+      Shown += async (s, e) => await CheckForUpdatesAsync();
 
       if (!File.Exists(UpdateCacheFile))
       {
@@ -680,11 +681,11 @@ namespace DMF
       Text = "DMF";
       DoubleBuffered = true;
 
-      this.AllowDrop = true;
-      this.DragEnter += DMForm_DragEnter;
-      this.DragDrop += DMForm_DragDrop;
+      AllowDrop = true;
+      DragEnter += DMForm_DragEnter;
+      DragDrop += DMForm_DragDrop;
 
-      try { this.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); }
+      try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); }
       catch { /* ... */ }
     }
 
@@ -1470,7 +1471,7 @@ namespace DMF
       {
         Dock = DockStyle.Fill,
         ColumnCount = 3,
-        RowCount = 8,
+        RowCount = 9,
         Padding = new Padding(10),
         AutoSize = false
       };
@@ -1598,8 +1599,21 @@ namespace DMF
       };
       tableMerge.Controls.Add(loopImage, 1, 5);
 
-      // Row 6: Preview button
-      tableMerge.Controls.Add(new Label { Text = "Preview:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 0, 6);
+      // Row 6 : Normalize size for concatenation
+      tableMerge.Controls.Add(new Label { Text = "Normalize:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 6);
+      chkConcatNormalize = new CheckBox
+      {
+        Text = "Normalize both videos to the same size (for Concatenate)",
+        AutoSize = true,
+        Dock = DockStyle.Fill,
+        Checked = false,
+        UseCompatibleTextRendering = true
+      };
+      chkConcatNormalize.CheckedChanged += (s, e) => UpdateControlStates();
+      tableMerge.Controls.Add(chkConcatNormalize, 1, 6);
+
+      // Row 7: Preview button
+      tableMerge.Controls.Add(new Label { Text = "Preview:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill, ForeColor = Color.Gray }, 0, 7);
       btnMergePreview = new Button
       {
         Text = "Preview Merge",
@@ -1610,7 +1624,7 @@ namespace DMF
         Enabled = false
       };
       btnMergePreview.Click += BtnMergePreview_Click;
-      tableMerge.Controls.Add(btnMergePreview, 1, 6);
+      tableMerge.Controls.Add(btnMergePreview, 1, 7);
 
       /* GIF */
       var tabGif = new TabPage("GIF");
@@ -2304,10 +2318,15 @@ namespace DMF
       overlayY.Enabled = isOverlayMode;
       loopImage.Enabled = isOverlayMode;
       mergeAnchor.Enabled = isOverlayMode;
-      mergeScaleW.Enabled = mergeEnabled && !isConcat;
-      mergeScaleH.Enabled = mergeEnabled && !isConcat;
-      mergeKeepAspect.Enabled = mergeEnabled && !isConcat;
-      mergeResizeAlgo.Enabled = mergeEnabled && !isConcat;
+
+      bool scaleForConcat = isConcat && chkConcatNormalize.Checked;
+      mergeScaleW.Enabled = mergeEnabled && (!isConcat || scaleForConcat);
+      mergeScaleH.Enabled = mergeEnabled && (!isConcat || scaleForConcat);
+      mergeKeepAspect.Enabled = mergeEnabled && (!isConcat || scaleForConcat);
+      mergeResizeAlgo.Enabled = mergeEnabled && (!isConcat || scaleForConcat);
+      chkConcatNormalize.Enabled = mergeEnabled && isConcat;
+      if (!isConcat && chkConcatNormalize.Checked)
+        chkConcatNormalize.Checked = false;
 
       btnMergePreview.Enabled = mergeEnabled &&
                                 !isConcat &&
@@ -2389,6 +2408,35 @@ namespace DMF
       catch { return 0; }
     }
 
+    private static async Task<(int width, int height)?> GetVideoDimensionsAsync(string filePath)
+    {
+      try
+      {
+        var psi = new ProcessStartInfo
+        {
+          FileName = FfprobeExecutable,
+          Arguments = $"-v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 \"{filePath}\"",
+          UseShellExecute = false,
+          RedirectStandardOutput = true,
+          CreateNoWindow = true
+        };
+        using var process = Process.Start(psi);
+        if (process == null) return null;
+        string output = await process.StandardOutput.ReadToEndAsync();
+        await process.WaitForExitAsync();
+        if (process.ExitCode != 0) return null;
+        string trimmed = output.Trim().Replace("\r", "").Replace("\n", "");
+        var parts = trimmed.Split('x');
+        if (parts.Length >= 2 &&
+          int.TryParse(parts[0], out int w) &&
+          int.TryParse(parts[1], out int h) &&
+          w > 0 && h > 0)
+          return (w, h);
+        return null;
+      }
+      catch { return null; }
+    }
+
     private void UpdateTimeFields()
     {
       if (startTime == null || endTime == null || trimMode == null) return;
@@ -2414,22 +2462,22 @@ namespace DMF
       }
     }
 
-    private void UpdateTimeFieldsForRange()
-    {
-      if (trimMode.SelectedItem?.ToString() != "Range") return;
+    // private void UpdateTimeFieldsForRange()
+    // {
+    //   if (trimMode.SelectedItem?.ToString() != "Range") return;
 
-      if (IsPlaceholder(startTime, TimePlaceholder) || string.IsNullOrWhiteSpace(startTime.Text))
-      {
-        startTime.Text = "00:00:00";
-        startTime.ForeColor = SystemColors.WindowText;
-      }
+    //   if (IsPlaceholder(startTime, TimePlaceholder) || string.IsNullOrWhiteSpace(startTime.Text))
+    //   {
+    //     startTime.Text = "00:00:00";
+    //     startTime.ForeColor = SystemColors.WindowText;
+    //   }
 
-      if (inputDuration > 0 && (IsPlaceholder(endTime, TimePlaceholder) || string.IsNullOrWhiteSpace(endTime.Text)))
-      {
-        endTime.Text = TimeSpan.FromSeconds(inputDuration).ToString(@"hh\:mm\:ss");
-        endTime.ForeColor = SystemColors.WindowText;
-      }
-    }
+    //   if (inputDuration > 0 && (IsPlaceholder(endTime, TimePlaceholder) || string.IsNullOrWhiteSpace(endTime.Text)))
+    //   {
+    //     endTime.Text = TimeSpan.FromSeconds(inputDuration).ToString(@"hh\:mm\:ss");
+    //     endTime.ForeColor = SystemColors.WindowText;
+    //   }
+    // }
 
     private void SetAutoOutput()
     {
@@ -2674,17 +2722,21 @@ namespace DMF
     {
       string mode = mergeMode.SelectedItem?.ToString() ?? "None";
       bool isOverlay = mode == "Overlay (image on video)";
-      bool isSideBySide = mode == "Side by side (hstack)" || mode == "Image side by side (video + image)";
       bool isConcat = mode == "Concatenate";
 
       overlayX.Enabled = isOverlay;
       overlayY.Enabled = isOverlay;
       loopImage.Enabled = isOverlay;
       mergeAnchor.Enabled = isOverlay;
-      mergeScaleW.Enabled = !isConcat;
-      mergeScaleH.Enabled = !isConcat;
-      mergeKeepAspect.Enabled = !isConcat;
-      mergeResizeAlgo.Enabled = !isConcat;
+
+      bool scaleEnabled = !isConcat || (chkConcatNormalize != null && chkConcatNormalize.Checked);
+      mergeScaleW.Enabled = scaleEnabled;
+      mergeScaleH.Enabled = scaleEnabled;
+      mergeKeepAspect.Enabled = scaleEnabled;
+      mergeResizeAlgo.Enabled = scaleEnabled;
+
+      if (chkConcatNormalize != null)
+        chkConcatNormalize.Enabled = isConcat;
 
       if (!isOverlay)
       {
@@ -2713,6 +2765,8 @@ namespace DMF
         return;
       }
 
+      if (!await CheckMergeSizesAsync(mode)) return;
+
       btnMergePreview.Enabled = false;
       status.Text = "Loading merge preview...";
       progressBar.Visible = true;
@@ -2721,7 +2775,7 @@ namespace DMF
       try
       {
         string tempFile = Path.GetTempFileName() + ".png";
-        string ffmpegArgs = BuildMergePreviewArgs(inputFile.Text, inputMergeFile.Text, tempFile);
+        string ffmpegArgs = await BuildMergePreviewArgsAsync(inputFile.Text, inputMergeFile.Text, tempFile);
         await RunFFmpeg(FfmpegExecutable, ffmpegArgs, CancellationToken.None, 0, null);
 
         using (var img = Image.FromFile(tempFile))
@@ -2903,12 +2957,36 @@ namespace DMF
       return string.Join(" ", args);
     }
 
-    private string BuildMergeFilter(string mode, bool preview = false)
+    private async Task<string> BuildMergePreviewArgsAsync(string input1, string input2, string tempFile)
     {
-      string scale2 = "";
+      var args = new List<string>();
+      string mode = mergeMode.SelectedItem?.ToString() ?? "None";
+
+      args.Add($"-i \"{input1}\"");
+      args.Add($"-i \"{input2}\"");
+
+      string filterComplex = await BuildMergeFilterAsync(mode, preview: true);
+      if (!string.IsNullOrEmpty(filterComplex))
+      {
+        args.Add($"-filter_complex \"{filterComplex}\"");
+        args.Add("-map \"[outv]\"");
+      }
+
+      args.Add("-vframes 1");
+      args.Add("-f image2");
+      args.Add("-vcodec png");
+      args.Add($"\"{tempFile}\"");
+
+      return string.Join(" ", args);
+    }
+
+    private async Task<string> BuildMergeFilterAsync(string mode, bool preview = false)
+    {
       int w = (int)mergeScaleW.Value;
       int h = (int)mergeScaleH.Value;
       string algo = mergeResizeAlgo.SelectedItem?.ToString() ?? "lanczos";
+
+      string scale2 = "";
       if (w > 0 || h > 0)
       {
         string sw = w > 0 ? w.ToString() : "iw";
@@ -2922,18 +3000,61 @@ namespace DMF
       }
 
       string filterComplex = "";
+
       if (mode == "Concatenate")
       {
-        if (preview)
-          filterComplex = "[0:v][1:v]concat=n=2:v=1:a=0[outv]";
+        bool normalize = chkConcatNormalize.Checked;
+        if (normalize)
+        {
+          int targetW = w, targetH = h;
+          if (targetW <= 0 || targetH <= 0)
+          {
+            var dims1 = await GetVideoDimensionsAsync(inputFile.Text);
+            if (dims1.HasValue)
+            {
+              if (targetW <= 0) targetW = dims1.Value.width;
+              if (targetH <= 0) targetH = dims1.Value.height;
+            }
+            if (targetW <= 0) targetW = 1280;
+            if (targetH <= 0) targetH = 720;
+          }
+          if (targetW % 2 != 0) targetW++;
+          if (targetH % 2 != 0) targetH++;
+
+          string norm1 = $"[0:v]scale={targetW}:{targetH}:force_original_aspect_ratio=decrease," +
+                         $"pad={targetW}:{targetH}:(ow-iw)/2:(oh-ih)/2:black,setsar=1,format=yuv420p[v0]";
+          string norm2 = $"[1:v]scale={targetW}:{targetH}:force_original_aspect_ratio=decrease," +
+                         $"pad={targetW}:{targetH}:(ow-iw)/2:(oh-ih)/2:black,setsar=1,format=yuv420p[v1]";
+
+          if (preview)
+            filterComplex = $"{norm1};{norm2};[v0][v1]concat=n=2:v=1:a=0[outv]";
+          else
+            filterComplex = $"{norm1};{norm2};[v0][0:a][v1][1:a]concat=n=2:v=1:a=1[outv][outa]";
+        }
         else
-          filterComplex = "[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[outv][outa]";
+        {
+          if (preview)
+            filterComplex = "[0:v][1:v]concat=n=2:v=1:a=0[outv]";
+          else
+            filterComplex = "[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[outv][outa]";
+        }
       }
       else if (mode == "Side by side (hstack)")
       {
-        string scale1 = "[0:v]scale=iw:ih[v0]";
-        string scale2part = string.IsNullOrEmpty(scale2) ? "[1:v]scale=iw:ih[v1]" : $"[1:v]{scale2}[v1]";
-        filterComplex = $"{scale1};{scale2part};[v0][v1]hstack=inputs=2[outv]";
+        int targetH = h;
+        if (targetH <= 0)
+        {
+          var d1 = await GetVideoDimensionsAsync(inputFile.Text);
+          var d2 = await GetVideoDimensionsAsync(inputMergeFile.Text);
+          int h1 = d1?.height ?? 720;
+          int h2 = d2?.height ?? 720;
+          targetH = Math.Min(h1, h2);
+        }
+        if (targetH % 2 != 0) targetH++;
+
+        string s1 = $"[0:v]scale=-2:{targetH}:flags={algo},setsar=1,format=yuv420p[v0]";
+        string s2 = $"[1:v]scale=-2:{targetH}:flags={algo},setsar=1,format=yuv420p[v1]";
+        filterComplex = $"{s1};{s2};[v0][v1]hstack=inputs=2[outv]";
       }
       else if (mode == "Overlay (image on video)")
       {
@@ -2956,27 +3077,50 @@ namespace DMF
       return filterComplex;
     }
 
-    private string BuildMergePreviewArgs(string input1, string input2, string tempFile)
+    private async Task<bool> CheckMergeSizesAsync(string mode)
     {
-      var args = new List<string>();
-      string mode = mergeMode.SelectedItem?.ToString() ?? "None";
+      if (mode != "Side by side (hstack)" && mode != "Concatenate")
+        return true;
 
-      args.Add($"-i \"{input1}\"");
-      args.Add($"-i \"{input2}\"");
+      var d1 = await GetVideoDimensionsAsync(inputFile.Text);
+      var d2 = await GetVideoDimensionsAsync(inputMergeFile.Text);
+      if (!d1.HasValue || !d2.HasValue)
+        return true;
 
-      string filterComplex = BuildMergeFilter(mode, preview: true);
-      if (!string.IsNullOrEmpty(filterComplex))
+      if (d1.Value.width == d2.Value.width && d1.Value.height == d2.Value.height)
+        return true;
+
+      string sizeInfo = $"File 1: {d1.Value.width}x{d1.Value.height}\nFile 2: {d2.Value.width}x{d2.Value.height}";
+
+      if (mode == "Concatenate" && !chkConcatNormalize.Checked)
       {
-        args.Add($"-filter_complex \"{filterComplex}\"");
-        args.Add("-map \"[outv]\"");
+        var r = MessageBox.Show(
+          $"Source files have different sizes:\n{sizeInfo}\n\n" +
+          "Concatenation requires matching sizes.\n" +
+          "Enable 'Normalize' option or the process may fail.\n\n" +
+          "Continue anyway?",
+          "Size mismatch",
+          MessageBoxButtons.YesNo,
+          MessageBoxIcon.Warning);
+        return r == DialogResult.Yes;
       }
 
-      args.Add("-vframes 1");
-      args.Add("-f image2");
-      args.Add("-vcodec png");
-      args.Add($"\"{tempFile}\"");
+      if (mode == "Side by side (hstack)")
+      {
+        int targetH = (int)mergeScaleH.Value;
+        string targetInfo = targetH > 0
+          ? $"Both videos will be scaled to height {targetH}."
+          : "Both videos will be scaled to the same height (min of the two).";
+        var r = MessageBox.Show(
+          $"Source files have different sizes:\n{sizeInfo}\n\n" +
+          targetInfo + "\n\nContinue?",
+          "Size mismatch",
+          MessageBoxButtons.YesNo,
+          MessageBoxIcon.Information);
+        return r == DialogResult.Yes;
+      }
 
-      return string.Join(" ", args);
+      return true;
     }
 
     private static (int w, int h, int? x, int? y)? ParseCropFromFilter(string filter)
@@ -3284,7 +3428,7 @@ namespace DMF
         BtnUpdatePreview_Click(sender, e);
     }
 
-    private void TryAutoDetectFormat() => OutputFile_TextChanged(this, EventArgs.Empty);
+    // private void TryAutoDetectFormat() => OutputFile_TextChanged(this, EventArgs.Empty);
 
     private void ChkAudioOnly_CheckedChanged(object? sender, EventArgs e)
     {
@@ -3294,9 +3438,9 @@ namespace DMF
 
       format.Items.Clear();
       if (audioOnlyChecked)
-        format.Items.AddRange(audioFormats.Cast<object>().ToArray());
+        format.Items.AddRange([.. audioFormats.Cast<object>()]);
       else
-        format.Items.AddRange(videoFormats.Cast<object>().ToArray());
+        format.Items.AddRange([.. videoFormats.Cast<object>()]);
 
       int index = format.Items.IndexOf(currentFormat);
       if (index >= 0)
@@ -3759,7 +3903,7 @@ namespace DMF
         _animationTimer.Tick += (s, e) =>
         {
           _animationDotCount = (_animationDotCount + 1) % 4;
-          string dots = new string('.', _animationDotCount);
+          string dots = new('.', _animationDotCount);
           btnCancel.Text = $"Cancel{dots}";
         };
       }
@@ -4010,6 +4154,17 @@ namespace DMF
         string mergeModeStr = mergeMode.SelectedItem?.ToString() ?? "None";
         if (mergeModeStr != "None" && !string.IsNullOrWhiteSpace(inputMergeFile.Text) && File.Exists(inputMergeFile.Text))
         {
+          if (!await CheckMergeSizesAsync(mergeModeStr))
+          {
+            status.Text = "Merge cancelled";
+            btnProcess.Visible = true;
+            btnCancel.Visible = false;
+            btnProcess.Enabled = true;
+            _animationTimer?.Stop();
+            progressBar.Visible = false;
+            progressBar.Style = ProgressBarStyle.Marquee;
+            return;
+          }
           await ProcessMergeAsync(ffmpegPath, mergeModeStr, token);
           status.Text = "Done!";
           Logger.Info($"Merge finished successfully: '{outputFile.Text}'");
@@ -4122,36 +4277,34 @@ namespace DMF
       string acodec = audioCodec.SelectedItem?.ToString() ?? "aac";
       if (acodec == "copy") acodec = "aac";
 
-      string filterComplex = BuildMergeFilter(mode, preview: false);
+      string filterComplex = await BuildMergeFilterAsync(mode, preview: false);
       if (string.IsNullOrEmpty(filterComplex))
       {
         Logger.Error("Merge filter is empty, cannot process.");
         throw new InvalidOperationException("Merge filter is empty.");
       }
-      if (!string.IsNullOrEmpty(filterComplex))
+
+      argsList.Add($"-filter_complex \"{filterComplex}\"");
+      if (mode == "Concatenate")
       {
-        argsList.Add($"-filter_complex \"{filterComplex}\"");
-        if (mode == "Concatenate")
-        {
-          argsList.Add("-map \"[outv]\"");
-          argsList.Add("-map \"[outa]\"");
-        }
-        else
-        {
-          argsList.Add("-map \"[outv]\"");
-          argsList.Add("-map 0:a?");
-        }
-        argsList.Add($"-c:v {vcodec}");
-        argsList.Add($"-c:a {acodec}");
-        if (crf.Value > 0 && vcodec != "copy")
-          argsList.Add($"-crf {crf.Value}");
-        if (!string.IsNullOrWhiteSpace(videoBitrate.Text))
-          argsList.Add($"-b:v {videoBitrate.Text.Trim()}");
-        if (!string.IsNullOrWhiteSpace(audioBitrate.Text))
-          argsList.Add($"-b:a {audioBitrate.Text.Trim()}");
-        if (mode == "Overlay (image on video)")
-          argsList.Add("-shortest");
+        argsList.Add("-map \"[outv]\"");
+        argsList.Add("-map \"[outa]\"");
       }
+      else
+      {
+        argsList.Add("-map \"[outv]\"");
+        argsList.Add("-map 0:a?");
+      }
+      argsList.Add($"-c:v {vcodec}");
+      argsList.Add($"-c:a {acodec}");
+      if (crf.Value > 0 && vcodec != "copy")
+        argsList.Add($"-crf {crf.Value}");
+      if (!string.IsNullOrWhiteSpace(videoBitrate.Text))
+        argsList.Add($"-b:v {videoBitrate.Text.Trim()}");
+      if (!string.IsNullOrWhiteSpace(audioBitrate.Text))
+        argsList.Add($"-b:a {audioBitrate.Text.Trim()}");
+      if (mode == "Overlay (image on video)")
+        argsList.Add("-shortest");
 
       argsList.Add($"\"{output}\"");
 

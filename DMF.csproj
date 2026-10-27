@@ -15,10 +15,10 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Version>0.7.2</Version>
-    <FileVersion>0.7.2</FileVersion>
+    <Version>0.7.3</Version>
+    <FileVersion>0.7.3</FileVersion>
     <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <InformationalVersion>0.7.2+$(SourceRevisionId)</InformationalVersion>
+    <InformationalVersion>0.7.3+$(SourceRevisionId)</InformationalVersion>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -41,7 +41,11 @@
 
   <ItemGroup>
     <EmbeddedResource Include="app.ico" />
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All"/>
+    <PackageReference Include="Microsoft.Build.Tasks.Git" Version="11.0.100-rc.3.26522.148">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
   </ItemGroup>
 
   <Target Name="SetSourceRevisionId" BeforeTargets="InitializeSourceControlInformation">
